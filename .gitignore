@@ -10,4 +10,4 @@ processed_batches/
 # Ignore model weights
 *.pth
 *.pt
-weights_*
+# weights_*
