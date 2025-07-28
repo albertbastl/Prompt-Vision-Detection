@@ -1,0 +1,8 @@
+# Ignore processed data batches
+processed_batches/
+*.pkl
+
+# Ignore image files
+*.png
+*.jpg
+*.jpeg
