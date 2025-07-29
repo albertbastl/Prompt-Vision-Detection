@@ -8,16 +8,20 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
-IMAGE_PATH     = "house_with_person.jpg"
-PROMPT         = "person"
+IMAGE_PATH      = "image.jpg"
+PROMPT          = "surf"
 DECODER_WEIGHTS = "weights_siglip_localizer.pth"
-MODEL_ID       = "google/siglip2-base-patch16-224"
-GRID_SIZE      = 14
-EMBED_DIM      = 768
-NUM_HEADS      = 2
-NUM_LAYERS     = 4
-TEXT_MAX_LEN   = 64
-OUTPUT_PATH    = None  # or set to "my_output.png"
+MODEL_ID        = "google/siglip2-base-patch16-224"
+GRID_SIZE       = 14
+EMBED_DIM       = 768
+NUM_HEADS       = 2
+NUM_LAYERS      = 4
+TEXT_MAX_LEN    = 64
+OUTPUT_PATH     = None  # or set to "my_output.png"
+
+# ─── HEATMAP FILTERING THRESHOLDS ─────────────────────────────────────────────
+ABS_THRESH  = 0.10  # absolute threshold: remove values < this
+REL_THRESH  = 0.25  # relative threshold: remove values < 25% of max
 
 # ─── MODEL DEFINITION ─────────────────────────────────────────────────────────
 class LocalizationDecoder(nn.Module):
@@ -82,7 +86,12 @@ def main():
             attention_mask=text_inputs["attention_mask"]
         ).pooler_output
         logits = decoder(t, v)
-        probs = torch.sigmoid(logits)
+        probs  = torch.sigmoid(logits)
+
+        # ─── HEATMAP THRESHOLDING ─────────────────────────────────────────────
+        abs_mask = probs >= ABS_THRESH
+        rel_mask = probs >= REL_THRESH * probs.max()
+        probs    = probs * (abs_mask & rel_mask)  # zero out low-activation cells
 
     heatmap = probs.cpu().numpy().reshape(GRID_SIZE, GRID_SIZE)
 
@@ -99,7 +108,7 @@ def main():
     ax.set_title(PROMPT, color='white', backgroundcolor='black')
 
     # Save
-    out_path = OUTPUT_PATH or f"overlay2_{os.path.basename(IMAGE_PATH)}"
+    out_path = OUTPUT_PATH or f"overlay3_{os.path.basename(IMAGE_PATH)}"
     if not out_path.lower().endswith(('.png', '.jpg')):
         out_path += '.png'
     plt.savefig(out_path, bbox_inches='tight', pad_inches=0)

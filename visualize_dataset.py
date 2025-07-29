@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 # ─── ADJUST THIS ─────────────────────────────────────────────────────────────
-BATCH_FILE = "processed_batches/image_batch_009012.pkl"  # path to your .pkl
+BATCH_FILE = "processed_batches_empty/image_batch_000500.pkl"  # path to your .pkl
 NUM_DISPLAY = 5                                        # how many samples to show
 GRID_SIZE = 14                                         # must match your preprocess
 

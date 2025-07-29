@@ -10,7 +10,7 @@ from transformers import AutoModel
 from tqdm import tqdm
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
-DATASET_DIR  = "processed_batches"                    # folder containing image_batch_*.pkl
+DATASET_DIR  = "processed_batches_empty"                    # folder containing image_batch_*.pkl
 MODEL_ID     = "google/siglip2-base-patch16-224"
 GRID_SIZE    = 14                                     # must match preprocessing
 EMBED_DIM    = 768

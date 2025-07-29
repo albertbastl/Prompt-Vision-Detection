@@ -6,8 +6,3 @@ processed_batches/
 *.png
 *.jpg
 *.jpeg
-
-# Ignore model weights
-*.pth
-*.pt
-# weights_*
