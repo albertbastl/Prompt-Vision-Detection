@@ -8,9 +8,9 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
-IMAGE_PATH      = "image.jpg"
-PROMPT          = "surf"
-DECODER_WEIGHTS = "weights_siglip_localizer.pth"
+IMAGE_PATH      = "persons.jpg"
+PROMPT          = "person"
+DECODER_WEIGHTS = "decoder_epoch10.pth"
 MODEL_ID        = "google/siglip2-base-patch16-224"
 GRID_SIZE       = 14
 EMBED_DIM       = 768
@@ -20,8 +20,8 @@ TEXT_MAX_LEN    = 64
 OUTPUT_PATH     = None  # or set to "my_output.png"
 
 # ─── HEATMAP FILTERING THRESHOLDS ─────────────────────────────────────────────
-ABS_THRESH  = 0.50  # absolute threshold: remove values < this
-REL_THRESH  = 0.25  # relative threshold: remove values < 25% of max
+ABS_THRESH  = 0.00  # absolute threshold: remove values < this
+REL_THRESH  = 0.00  # relative threshold: remove values < 25% of max
 
 # ─── MODEL DEFINITION ─────────────────────────────────────────────────────────
 class LocalizationDecoder(nn.Module):
@@ -125,7 +125,7 @@ def main():
     cbar.set_label('Confidence', rotation=270, labelpad=15)
 
     # Save
-    out_path = OUTPUT_PATH or f"overlay3_{os.path.basename(IMAGE_PATH)}"
+    out_path = OUTPUT_PATH or f"overlay_{os.path.basename(IMAGE_PATH)}"
     if not out_path.lower().endswith(('.png', '.jpg')):
         out_path += '.png'
     plt.savefig(out_path, bbox_inches='tight', pad_inches=0)

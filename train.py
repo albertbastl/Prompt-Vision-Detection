@@ -16,7 +16,7 @@ import wandb
 import matplotlib.pyplot as plt
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
-DATASET_DIR               = "processed_batches_200"
+DATASET_DIR               = "processed_batches_3000_3crops"
 MODEL_ID                  = "google/siglip2-base-patch16-224"
 GRID_SIZE                 = 14
 EMBED_DIM                 = 768
@@ -27,7 +27,6 @@ BATCH_SIZE                = 256
 EPOCHS                    = 10
 LOG_IMAGES_EVERY_N_STEPS  = 2
 KEEP_LAST_N_EPOCH_WEIGHTS = 3
-CHECKPOINT_DIR            = "./checkpoints"
 
 # ─── DATASET ──────────────────────────────────────────────────────────────────
 class PreprocessedDataset(Dataset):
@@ -90,51 +89,30 @@ class LocalizationDecoder(nn.Module):
         return self.head(out.squeeze(1))
 
 # ─── CHECKPOINT / W&B HELPERS ────────────────────────────────────────────────
-def save_ckpt_to_disk(decoder, epoch):
-    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-    ckpt_path = os.path.join(CHECKPOINT_DIR, f"decoder_epoch{epoch}.pth")
-    torch.save(decoder.state_dict(), ckpt_path)
-    return ckpt_path
+def save_weights(decoder, epoch, run):
+    import torch, wandb, os
 
-def upload_ckpt_to_wandb(ckpt_path, epoch, run):
-    # Show file under Run → Files for this run (immediate visibility)
-    wandb.save(ckpt_path, base_path=CHECKPOINT_DIR, policy="now")
+    epoch = int(epoch)
+    fname = f"decoder_epoch{epoch}.pth"
+    torch.save(decoder.state_dict(), fname)
 
-    # Log as a versioned Artifact named "decoder"
-    art = wandb.Artifact("decoder", type="model", metadata={"epoch": int(epoch)})
-    art.add_file(ckpt_path, name=os.path.basename(ckpt_path))
-    logged = run.log_artifact(art, aliases=[f"epoch-{epoch}", "latest"])
-    logged.wait()  # ensure processed server-side
+    # upload new checkpoint
+    wandb.save(fname, policy="now")
 
-def cleanup_wandb_artifacts(entity, project, keep_last_n=3):
-    """Keep only the newest N versions of the single 'decoder' artifact."""
+    # delete old checkpoint locally
+    if os.path.exists(f"decoder_epoch{epoch - 1}.pth"):
+        os.remove(f"decoder_epoch{epoch - 1}.pth")
+
+    # delete old checkpoint from W&B run files
     try:
-        api = wandb.Api()
-        coll = api.artifact_collection(f"{entity}/{project}/decoder", type="model")
-        versions = list(coll.versions())  # newest first
-        for a in versions[keep_last_n:]:
-            print(f"Deleting old artifact version: {a.name} (epoch={a.metadata.get('epoch')})")
-            a.delete()
-    except Exception as e:
-        print(f"Warning: artifact cleanup failed: {e}")
-
-def cleanup_wandb_run_files(run, keep_last_n=3):
-    """Keep only the newest N checkpoint files in Run → Files."""
-    try:
-        api = wandb.Api()
-        api_run = api.run(f"{run.entity}/{run.project}/{run.id}")
-        ckpt_files = []
+        api_run = wandb.Api().run(f"{run.entity}/{run.project}/{run.id}")
         for f in api_run.files():
-            if f.name.endswith(".pth") and ("decoder_epoch" in f.name):
-                m = re.search(r"decoder_epoch(\d+)\.pth$", f.name)
-                epoch = int(m.group(1)) if m else -1
-                ckpt_files.append((epoch, f.name, f))
-        ckpt_files.sort(key=lambda x: (x[0], x[1]), reverse=True)  # newest first
-        for _, name, fobj in ckpt_files[keep_last_n:]:
-            print(f"Deleting old run file: {name}")
-            fobj.delete()
+            if f.name == f"decoder_epoch{epoch - KEEP_LAST_N_EPOCH_WEIGHTS}.pth":
+                f.delete()
+                break
     except Exception as e:
-        print(f"Warning: run-file cleanup failed: {e}")
+        print(f"Failed to delete {f'decoder_epoch{epoch - KEEP_LAST_N_EPOCH_WEIGHTS}.pth'} from W&B: {e}")
+
 
 # ─── TRAINING LOOP ────────────────────────────────────────────────────────────
 def main():
@@ -155,6 +133,7 @@ def main():
             "batch_size": BATCH_SIZE,
             "epochs": EPOCHS,
             "log_images_every": LOG_IMAGES_EVERY_N_STEPS,
+            "dataset_dir": DATASET_DIR,
         },
     )
     cfg = wandb.config
@@ -230,15 +209,7 @@ def main():
         print(f"Epoch {epoch} complete — avg loss: {avg_loss:.4f}")
 
         # Save → Upload → Cleanup (keep last N)
-        ckpt_path = save_ckpt_to_disk(decoder, epoch)
-        upload_ckpt_to_wandb(ckpt_path, epoch, run)
-        try:
-            os.remove(ckpt_path)  # remove local copy
-        except OSError:
-            pass
-        cleanup_wandb_artifacts(entity=run.entity, project=run.project,
-                                keep_last_n=KEEP_LAST_N_EPOCH_WEIGHTS)
-        cleanup_wandb_run_files(run, keep_last_n=KEEP_LAST_N_EPOCH_WEIGHTS)
+        save_weights(decoder, epoch, run)
 
     wandb.finish()
     print("Training complete.")
