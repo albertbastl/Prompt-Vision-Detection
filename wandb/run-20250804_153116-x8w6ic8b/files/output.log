@@ -1,0 +1,57 @@
+Found 200 batch files, total samples: 2248
+Epoch 1/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.49s/it]
+Epoch 1 complete — avg loss: 0.6154
+Warning: artifact cleanup failed: Api.artifact_collection() got an unexpected keyword argument 'type'
+Epoch 2/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.46s/it]
+Epoch 2 complete — avg loss: 0.5696
+Warning: artifact cleanup failed: Api.artifact_collection() got an unexpected keyword argument 'type'
+Epoch 3/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.47s/it]
+Epoch 3 complete — avg loss: 0.5615
+Warning: artifact cleanup failed: Api.artifact_collection() got an unexpected keyword argument 'type'
+Epoch 4/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.47s/it]
+Epoch 4 complete — avg loss: 0.5358
+Warning: artifact cleanup failed: Api.artifact_collection() got an unexpected keyword argument 'type'
+Epoch 5/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:21<00:00,  2.43s/it]
+Epoch 5 complete — avg loss: 0.4977
+Warning: artifact cleanup failed: Api.artifact_collection() got an unexpected keyword argument 'type'
+Epoch 6/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.46s/it]
+Epoch 6 complete — avg loss: 0.4572
+Warning: artifact cleanup failed: Api.artifact_collection() got an unexpected keyword argument 'type'
+Epoch 7/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.45s/it]
+Epoch 7 complete — avg loss: 0.4259
+Traceback (most recent call last):
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 232, in <module>
+    main()
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 221, in main
+    upload_ckpt_to_wandb(ckpt_path, epoch, run)
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 113, in upload_ckpt_to_wandb
+    logged.wait()  # ensure fully processed server-side
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/artifacts/artifact.py", line 1242, in wait
+    result = self._save_handle.wait_or(timeout=timeout)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/mailbox/mailbox_handle.py", line 118, in wait_or
+    return self._fn(self._handle.wait_or(timeout=timeout))
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/mailbox/response_handle.py", line 84, in wait_or
+    if not self._event.wait(timeout=timeout):
+  File "/usr/lib/python3.10/threading.py", line 607, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.10/threading.py", line 320, in wait
+    waiter.acquire()
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 232, in <module>
+    main()
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 221, in main
+    upload_ckpt_to_wandb(ckpt_path, epoch, run)
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 113, in upload_ckpt_to_wandb
+    logged.wait()  # ensure fully processed server-side
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/artifacts/artifact.py", line 1242, in wait
+    result = self._save_handle.wait_or(timeout=timeout)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/mailbox/mailbox_handle.py", line 118, in wait_or
+    return self._fn(self._handle.wait_or(timeout=timeout))
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/mailbox/response_handle.py", line 84, in wait_or
+    if not self._event.wait(timeout=timeout):
+  File "/usr/lib/python3.10/threading.py", line 607, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.10/threading.py", line 320, in wait
+    waiter.acquire()
+KeyboardInterrupt

@@ -1,0 +1,26 @@
+Found 200 batch files, total samples: 2248
+Epoch 1/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.51s/it]
+Epoch 1 complete — avg loss: 0.6152
+Uploaded epoch 1 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 2/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.46s/it]
+Epoch 2 complete — avg loss: 0.5681
+Uploaded epoch 2 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 3/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.45s/it]
+Epoch 3 complete — avg loss: 0.5595
+Uploaded epoch 3 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 4/10:  67%|█████████████████████████████████████████████████████████████████████████████████████████████████████▎                                                  | 6/9 [00:17<00:08,  2.96s/it]
+Traceback (most recent call last):
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 249, in <module>
+    main()
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 214, in main
+    loss_val = loss.item()
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 249, in <module>
+    main()
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 214, in main
+    loss_val = loss.item()
+KeyboardInterrupt

@@ -9,7 +9,7 @@ from transformers import AutoTokenizer
 import torch
 
 # ─── CONSTANT PARAMETERS ──────────────────────────────────────────────────────
-NUM_SAMPLES   = 3000    # how many images to process
+NUM_SAMPLES   = 200    # how many images to process
 NUM_CROPS     =    3    # crops per prompt
 MIN_CROP      =  50    # min crop dimension (px)
 MAX_CROP      =  100    # max crop dimension (px)
@@ -18,7 +18,7 @@ GRID_SIZE     =   14    # number of grid cells per side (14×14 = 196)
 TEXT_MAX_LEN  =   64    # max token length for phrases
 MODEL_ID      = "google/siglip2-base-patch16-224"
 DATASET       = "clane9/NSD-Flat"
-SAVE_DIR      = "processed_batches_empty"
+SAVE_DIR      = "processed_batches_200"
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 def get_random_crop_coords(img_w, img_h, crop_w, crop_h):

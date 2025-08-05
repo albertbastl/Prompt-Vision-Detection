@@ -20,7 +20,7 @@ TEXT_MAX_LEN    = 64
 OUTPUT_PATH     = None  # or set to "my_output.png"
 
 # ─── HEATMAP FILTERING THRESHOLDS ─────────────────────────────────────────────
-ABS_THRESH  = 0.10  # absolute threshold: remove values < this
+ABS_THRESH  = 0.50  # absolute threshold: remove values < this
 REL_THRESH  = 0.25  # relative threshold: remove values < 25% of max
 
 # ─── MODEL DEFINITION ─────────────────────────────────────────────────────────
@@ -95,6 +95,9 @@ def main():
 
     heatmap = probs.cpu().numpy().reshape(GRID_SIZE, GRID_SIZE)
 
+    # Optional: gamma correction to enhance mid-tone contrast
+    heatmap = np.power(heatmap, 0.8)
+
     # Upsample to image resolution
     W, H = image.size
     cell_w, cell_h = W // GRID_SIZE, H // GRID_SIZE
@@ -103,9 +106,23 @@ def main():
     # Plot & overlay
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.imshow(image)
-    ax.imshow(mask_up, cmap='viridis', alpha=0.5, extent=(0, W, H, 0), interpolation='bicubic')
+
+    heatmap_img = ax.imshow(
+        mask_up,
+        cmap='plasma',        # perceptually uniform colormap
+        alpha=0.6,
+        extent=(0, W, H, 0),
+        interpolation='bicubic',
+        vmin=0.0,              # linear color scale
+        vmax=1.0
+    )
+
     ax.axis('off')
     ax.set_title(PROMPT, color='white', backgroundcolor='black')
+
+    # Add colorbar
+    cbar = plt.colorbar(heatmap_img, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label('Confidence', rotation=270, labelpad=15)
 
     # Save
     out_path = OUTPUT_PATH or f"overlay3_{os.path.basename(IMAGE_PATH)}"

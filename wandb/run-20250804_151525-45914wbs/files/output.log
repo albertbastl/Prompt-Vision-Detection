@@ -1,0 +1,134 @@
+Found 200 batch files, total samples: 2248
+Epoch 1/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.53s/it]
+Epoch 1 complete — avg loss: 0.6180
+Uploaded epoch 1 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 2/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.46s/it]
+Epoch 2 complete — avg loss: 0.5683
+Uploaded epoch 2 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 3/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.45s/it]
+Epoch 3 complete — avg loss: 0.5568
+Uploaded epoch 3 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 4/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.44s/it]
+Epoch 4 complete — avg loss: 0.5233
+Uploaded epoch 4 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 5/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.48s/it]
+Epoch 5 complete — avg loss: 0.4769
+Uploaded epoch 5 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 6/10:  67%|█████████████████████████████████████████████████████████████████████████████████████████████████████▎                                                  | 6/9 [00:18<00:09,  3.04s/it]
+Traceback (most recent call last):
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 237, in <module>
+    main()
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 220, in main
+    wandb.log({"examples/comparison": wandb.Image(fig)})
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/data_types/image.py", line 266, in __init__
+    self._initialize_from_data(data_or_path, mode, file_type, normalize)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/data_types/image.py", line 396, in _initialize_from_data
+    util.ensure_matplotlib_figure(data).savefig(buf, format=self.format)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/figure.py", line 3395, in savefig
+    self.canvas.print_figure(fname, **kwargs)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backend_bases.py", line 2204, in print_figure
+    result = print_method(
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backend_bases.py", line 2054, in <lambda>
+    print_method = functools.wraps(meth)(lambda *args, **kwargs: meth(
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 496, in print_png
+    self._print_pil(filename_or_obj, "png", pil_kwargs, metadata)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 444, in _print_pil
+    FigureCanvasAgg.draw(self)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 387, in draw
+    self.figure.draw(self.renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/artist.py", line 95, in draw_wrapper
+    result = draw(artist, renderer, *args, **kwargs)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/figure.py", line 3162, in draw
+    mimage._draw_list_compositing_images(
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/image.py", line 132, in _draw_list_compositing_images
+    a.draw(renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axes/_base.py", line 3101, in draw
+    self._update_title_position(renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axes/_base.py", line 3045, in _update_title_position
+    ax.yaxis.get_tightbbox(renderer)  # update offsetText
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axis.py", line 1370, in get_tightbbox
+    ticks_to_draw = self._update_ticks()
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axis.py", line 1302, in _update_ticks
+    major_ticks = self.get_major_ticks(len(major_locs))
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axis.py", line 1672, in get_major_ticks
+    self._copy_tick_props(self.majorTicks[0], tick)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axis.py", line 1620, in _copy_tick_props
+    dest.gridline.update_from(src.gridline)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/lines.py", line 1357, in update_from
+    self._marker = MarkerStyle(marker=other._marker)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/markers.py", line 248, in __init__
+    self._set_marker(marker)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/markers.py", line 323, in _set_marker
+    self.__dict__ = copy.deepcopy(marker.__dict__)
+  File "/usr/lib/python3.10/copy.py", line 146, in deepcopy
+    y = copier(x, memo)
+  File "/usr/lib/python3.10/copy.py", line 231, in _deepcopy_dict
+    y[deepcopy(key, memo)] = deepcopy(value, memo)
+  File "/usr/lib/python3.10/copy.py", line 169, in deepcopy
+    if isinstance(rv, str):
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 237, in <module>
+    main()
+  File "/home/albertbastl/Documents/MRS/prompt-guided-object-localizer/train.py", line 220, in main
+    wandb.log({"examples/comparison": wandb.Image(fig)})
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/data_types/image.py", line 266, in __init__
+    self._initialize_from_data(data_or_path, mode, file_type, normalize)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/wandb/sdk/data_types/image.py", line 396, in _initialize_from_data
+    util.ensure_matplotlib_figure(data).savefig(buf, format=self.format)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/figure.py", line 3395, in savefig
+    self.canvas.print_figure(fname, **kwargs)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backend_bases.py", line 2204, in print_figure
+    result = print_method(
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backend_bases.py", line 2054, in <lambda>
+    print_method = functools.wraps(meth)(lambda *args, **kwargs: meth(
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 496, in print_png
+    self._print_pil(filename_or_obj, "png", pil_kwargs, metadata)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 444, in _print_pil
+    FigureCanvasAgg.draw(self)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 387, in draw
+    self.figure.draw(self.renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/artist.py", line 95, in draw_wrapper
+    result = draw(artist, renderer, *args, **kwargs)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/figure.py", line 3162, in draw
+    mimage._draw_list_compositing_images(
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/image.py", line 132, in _draw_list_compositing_images
+    a.draw(renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axes/_base.py", line 3101, in draw
+    self._update_title_position(renderer)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axes/_base.py", line 3045, in _update_title_position
+    ax.yaxis.get_tightbbox(renderer)  # update offsetText
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axis.py", line 1370, in get_tightbbox
+    ticks_to_draw = self._update_ticks()
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axis.py", line 1302, in _update_ticks
+    major_ticks = self.get_major_ticks(len(major_locs))
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axis.py", line 1672, in get_major_ticks
+    self._copy_tick_props(self.majorTicks[0], tick)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/axis.py", line 1620, in _copy_tick_props
+    dest.gridline.update_from(src.gridline)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/lines.py", line 1357, in update_from
+    self._marker = MarkerStyle(marker=other._marker)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/markers.py", line 248, in __init__
+    self._set_marker(marker)
+  File "/home/albertbastl/.local/lib/python3.10/site-packages/matplotlib/markers.py", line 323, in _set_marker
+    self.__dict__ = copy.deepcopy(marker.__dict__)
+  File "/usr/lib/python3.10/copy.py", line 146, in deepcopy
+    y = copier(x, memo)
+  File "/usr/lib/python3.10/copy.py", line 231, in _deepcopy_dict
+    y[deepcopy(key, memo)] = deepcopy(value, memo)
+  File "/usr/lib/python3.10/copy.py", line 169, in deepcopy
+    if isinstance(rv, str):
+KeyboardInterrupt

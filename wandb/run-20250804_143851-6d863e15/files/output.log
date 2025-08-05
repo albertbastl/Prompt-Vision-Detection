@@ -1,0 +1,41 @@
+Found 200 batch files, total samples: 2248
+Epoch 1/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.53s/it]
+Epoch 1 complete — avg loss: 0.6272
+Uploaded epoch 1 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 2/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.45s/it]
+Epoch 2 complete — avg loss: 0.5691
+Uploaded epoch 2 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 3/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.46s/it]
+Epoch 3 complete — avg loss: 0.5608
+Uploaded epoch 3 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 4/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:21<00:00,  2.43s/it]
+Epoch 4 complete — avg loss: 0.5399
+Uploaded epoch 4 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 5/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:21<00:00,  2.42s/it]
+Epoch 5 complete — avg loss: 0.5020
+Uploaded epoch 5 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 6/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.45s/it]
+Epoch 6 complete — avg loss: 0.4661
+Uploaded epoch 6 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 7/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:21<00:00,  2.42s/it]
+Epoch 7 complete — avg loss: 0.4393
+Uploaded epoch 7 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 8/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.45s/it]
+Epoch 8 complete — avg loss: 0.4097
+Uploaded epoch 8 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 9/10: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:21<00:00,  2.44s/it]
+Epoch 9 complete — avg loss: 0.3978
+Uploaded epoch 9 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
+Epoch 10/10: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:22<00:00,  2.48s/it]
+Epoch 10 complete — avg loss: 0.3640
+Uploaded epoch 10 weights to W&B.
+Warning: could not fetch artifacts for cleanup: Api.artifacts() got an unexpected keyword argument 'project'
