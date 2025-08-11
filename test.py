@@ -8,8 +8,8 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
-IMAGE_PATH      = "persons.jpg"
-PROMPT          = "person"
+IMAGE_PATH      = "a.jpg"
+PROMPT          = "window"
 DECODER_WEIGHTS = "decoder_epoch10.pth"
 MODEL_ID        = "google/siglip2-base-patch16-224"
 GRID_SIZE       = 14
@@ -20,7 +20,7 @@ TEXT_MAX_LEN    = 64
 OUTPUT_PATH     = None  # or set to "my_output.png"
 
 # ─── HEATMAP FILTERING THRESHOLDS ─────────────────────────────────────────────
-ABS_THRESH  = 0.00  # absolute threshold: remove values < this
+ABS_THRESH  = 0.50  # absolute threshold: remove values < this
 REL_THRESH  = 0.00  # relative threshold: remove values < 25% of max
 
 # ─── MODEL DEFINITION ─────────────────────────────────────────────────────────

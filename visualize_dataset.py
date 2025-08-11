@@ -4,8 +4,8 @@ import numpy as np
 import torch
 
 # ─── ADJUST THIS ─────────────────────────────────────────────────────────────
-BATCH_FILE = "processed_batches_empty/image_batch_000500.pkl"  # path to your .pkl
-NUM_DISPLAY = 5                                        # how many samples to show
+BATCH_FILE = "dataset_1_2_5_3000/image_batch_000030.pkl"  # path to your .pkl
+NUM_DISPLAY = 10                                        # how many samples to show
 GRID_SIZE = 14                                         # must match your preprocess
 
 # ─── VISUALIZATION FUNCTION ─────────────────────────────────────────────────

@@ -16,7 +16,7 @@ import wandb
 import matplotlib.pyplot as plt
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
-DATASET_DIR               = "processed_batches_3000_3crops"
+DATASET_DIR               = "dataset_1_2_5_3000"
 MODEL_ID                  = "google/siglip2-base-patch16-224"
 GRID_SIZE                 = 14
 EMBED_DIM                 = 768
@@ -25,7 +25,8 @@ NUM_LAYERS                = 4
 LEARNING_RATE             = 6.9e-5
 BATCH_SIZE                = 256
 EPOCHS                    = 10
-LOG_IMAGES_EVERY_N_STEPS  = 2
+LOG_IMAGES_EVERY_N_STEPS  = 10
+LOG_EVERY_N_STEPS         = 5
 KEEP_LAST_N_EPOCH_WEIGHTS = 3
 
 # ─── DATASET ──────────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ def main():
 
     run = wandb.init(
         project="prompt-guided-object-localizer",
-        name=f"decoder_e{EPOCHS}_h{NUM_HEADS}_l{NUM_LAYERS}_b{BATCH_SIZE}_lr{LEARNING_RATE}",
+        name=f"dataset_test_decoder_e{EPOCHS}_h{NUM_HEADS}_l{NUM_LAYERS}_b{BATCH_SIZE}_lr{LEARNING_RATE}",
         config={
             "model_id": MODEL_ID,
             "grid_size": GRID_SIZE,
@@ -183,7 +184,8 @@ def main():
 
             loss_val = loss.item()
             epoch_loss += loss_val * px.size(0)
-            wandb.log({"train/loss": loss_val, "step": global_step})
+            if global_step == 1 or global_step % LOG_EVERY_N_STEPS == 0:
+                wandb.log({"train/loss": loss_val, "step": global_step})
 
             if global_step % cfg.log_images_every == 0:
                 try:
