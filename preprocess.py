@@ -96,8 +96,8 @@ def encode_image(pil_img):
         spatial_shapes=batch["spatial_shapes"],
     )
     v = out.last_hidden_state.float()   # [1, T, D]
-    return v[0].cpu().to(torch.float16).numpy()  # [T, D]
-
+    v = v.mean(dim=1)                   # -> [1, D]  (mean-pool tokens)
+    return v[0].cpu().to(torch.float16).numpy()  # [D]
 
 @torch.no_grad()
 def encode_text(text: str):
@@ -131,8 +131,7 @@ if __name__ == "__main__":
 
             # heatmap for this category in this crop
             mask255, _ = make_tile_binary_heatmap(W, H, TILE, cat_bboxes, original_w, original_h, cx0, cy0)
-            heat01 = (mask255 > 0).astype(np.uint8)             # HxW in {0,1}
-            img_arr = np.asarray(cropped_img, dtype=np.uint8)   # HxWx3
+            heat01 = (mask255 > 0).astype(np.uint8)
 
             # compute embeddings once for the crop + the positive/negative words
             img_emb = encode_image(cropped_img)                 # [D]
@@ -142,25 +141,18 @@ if __name__ == "__main__":
             out_base = f"{i:05d}_{cat.replace(' ', '_')}"
             np.savez_compressed(
                 os.path.join(OUT_DIR, f"{out_base}.npz"),
-                image=img_arr,                       # uint8 HxWx3
-                word=np.array(cat),                  # str
-                heatmap=heat01,                      # uint8 HxW {0,1}
-                img_emb=img_emb,                     # float16 [D]
-                txt_emb=pos_txt_emb,                 # float16 [D]
-                tile=np.array(TILE, dtype=np.int32), # handy meta
+                heatmap=heat01.astype(np.uint8),  # HxW {0,1}
+                img_emb=img_emb,                  # float16 [D]
+                txt_emb=pos_txt_emb,              # float16 [D]
             )
 
             # ----- save NEGATIVE: least-similar word + zero heatmap (same crop) -----
             d = PMI.get(cat, {})
             neg_word = (min(d, key=d.get) if d else "none")
             neg_txt_emb = encode_text(neg_word)
-
             np.savez_compressed(
                 os.path.join(OUT_DIR, f"{i:05d}_{neg_word.replace(' ', '_')}__neg.npz"),
-                image=img_arr,                                  # same crop
-                word=np.array(neg_word),
-                heatmap=np.zeros_like(heat01, dtype=np.uint8),  # zeros
-                img_emb=img_emb,                                 # reuse same image emb
-                txt_emb=neg_txt_emb,                             # neg text emb
-                tile=np.array(TILE, dtype=np.int32),
+                heatmap=np.zeros_like(heat01, dtype=np.uint8),  # HxW zeros
+                img_emb=img_emb,                                 # same image emb
+                txt_emb=neg_txt_emb,                             # negative text emb
             )
