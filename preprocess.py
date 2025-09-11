@@ -82,32 +82,31 @@ def crop_image(img):
 # ─── SIGLIP2 ENCODERS ──────────────────────────────────────────────
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype  = torch.float16 if device == "cuda" else torch.float32
-model = AutoModel.from_pretrained(CKPT, torch_dtype=dtype).to(device).eval()
+siglip = AutoModel.from_pretrained(CKPT, torch_dtype=dtype).to(device).eval()
 processor = AutoProcessor.from_pretrained(CKPT)
 
 @torch.no_grad()
 def encode_image(pil_img):
-    inputs = processor(images=pil_img, return_tensors="pt")
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-    feats = model.get_image_features(**inputs)                  # [1, D]
-    feats = torch.nn.functional.normalize(feats, p=2, dim=-1)   # cosine-friendly
-    return feats[0].to("cpu").to(torch.float16).numpy()         # float16 to save space
+    batch = processor(images=pil_img, return_tensors="pt")
+    batch = {k: v.to(device) for k, v in batch.items()}
+
+    out = siglip.vision_model(
+        pixel_values=batch["pixel_values"],
+        attention_mask=batch.get("attention_mask", batch["pixel_attention_mask"]),
+        spatial_shapes=batch["spatial_shapes"],
+    )
+    v = out.last_hidden_state.float()   # [1, T, D]
+    return v[0].cpu().to(torch.float16).numpy()  # [T, D]
+
 
 @torch.no_grad()
-def encode_text(text):
-    # text can be a string or list of strings; we return a single vector for string
-    if isinstance(text, str):
-        texts = [text]
-        single = True
-    else:
-        texts = list(text)
-        single = False
-    inputs = processor(text=texts, return_tensors="pt", padding=True, truncation=True)
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-    feats = model.get_text_features(**inputs)                   # [B, D]
-    feats = torch.nn.functional.normalize(feats, p=2, dim=-1)
-    feats = feats.to("cpu").to(torch.float16).numpy()
-    return feats[0] if single else feats
+def encode_text(text: str):
+    toks = processor(text=[text], return_tensors="pt", padding=True, truncation=True)
+    toks = {k: v.to(device) for k, v in toks.items() if k in ("input_ids", "attention_mask")}
+    emb = siglip.text_model(**toks).pooler_output           # [1, D]
+    emb = torch.nn.functional.normalize(emb, p=2, dim=-1)
+    return emb.squeeze(0).cpu().half().numpy()              # [D]
+
 
 # ─── MAIN LOOP ──────────────────────────────────────────────────────
 if __name__ == "__main__":
