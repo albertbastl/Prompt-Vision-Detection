@@ -8,11 +8,11 @@ import torch
 from transformers import AutoModel, AutoProcessor
 
 # ─── SETTINGS ──────────────────────────────────────────────────────
-N = 100
-TILE = 16
+N = 1000
+PATCHES = 16
 MIN_CROP = 0.8
 NSD_REF = 425
-OUT_DIR = "out_images"
+OUT_DIR = "preprocessed_dataset"
 CKPT = "google/siglip2-base-patch16-naflex"
 
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -23,10 +23,10 @@ with open("./words/pmi.json", "r") as f:
 
 # ─── HELPERS ──────────────────────────────────────────────────────
 def stretch_to_multiple(img):
-    """Resize image so that width and height are multiples of TILE."""
+    """Resize image so that width and height are multiples of PATCHES."""
     W, H = img.size
-    newW = ((W + TILE - 1) // TILE) * TILE
-    newH = ((H + TILE - 1) // TILE) * TILE
+    newW = ((W + PATCHES - 1) // PATCHES) * PATCHES
+    newH = ((H + PATCHES - 1) // PATCHES) * PATCHES
     if (newW, newH) == (W, H):
         return img
     return img.resize((newW, newH), Image.Resampling.BILINEAR)
@@ -68,15 +68,15 @@ def make_tile_binary_heatmap(W, H, tile, bboxes, original_w, original_h, crop_x0
     return mask, grid
 
 def crop_image(img):
-    """Random crop with size aligned to TILE and *origin snapped to TILE*. Returns cropped image AND (x0,y0)."""
+    """Random crop with size aligned to PATCHES and *origin snapped to PATCHES*. Returns cropped image AND (x0,y0)."""
     W, H = img.size
     scale_w = random.uniform(MIN_CROP, 1.0)
     scale_h = random.uniform(MIN_CROP, 1.0)
     newW = int(W * scale_w); newH = int(H * scale_h)
-    newW = (newW // TILE) * TILE; newH = (newH // TILE) * TILE
-    newW = max(TILE, min(newW, W)); newH = max(TILE, min(newH, H))
-    x0 = (random.randint(0, W - newW) // TILE) * TILE
-    y0 = (random.randint(0, H - newH) // TILE) * TILE
+    newW = (newW // PATCHES) * PATCHES; newH = (newH // PATCHES) * PATCHES
+    newW = max(PATCHES, min(newW, W)); newH = max(PATCHES, min(newH, H))
+    x0 = (random.randint(0, W - newW) // PATCHES) * PATCHES
+    y0 = (random.randint(0, H - newH) // PATCHES) * PATCHES
     return img.crop((x0, y0, x0 + newW, y0 + newH)), x0, y0
 
 # ─── SIGLIP2 ENCODERS ──────────────────────────────────────────────
@@ -87,17 +87,34 @@ processor = AutoProcessor.from_pretrained(CKPT)
 
 @torch.no_grad()
 def encode_image(pil_img):
-    batch = processor(images=pil_img, return_tensors="pt")
+    gh, gw = pil_img.height // PATCHES, pil_img.width // PATCHES  # grid size
+    batch = processor(
+        images=pil_img,
+        return_tensors="pt",
+        do_resize=False,
+        max_num_patches=4096,
+    )
     batch = {k: v.to(device) for k, v in batch.items()}
 
     out = siglip.vision_model(
         pixel_values=batch["pixel_values"],
-        attention_mask=batch.get("attention_mask", batch["pixel_attention_mask"]),
+        attention_mask=batch["pixel_attention_mask"],
         spatial_shapes=batch["spatial_shapes"],
     )
-    v = out.last_hidden_state.float()   # [1, T, D]
-    v = v.mean(dim=1)                   # -> [1, D]  (mean-pool tokens)
-    return v[0].cpu().to(torch.float16).numpy()  # [D]
+
+    feats = out.last_hidden_state[0].float()        # [T, D]
+    mask  = batch["pixel_attention_mask"][0].bool() # [T]
+    feats = feats[mask]                              # [T_real, D]
+
+    # expect one token per 16×16 patch
+    T, D = feats.shape
+    assert T == gh * gw, f"Token count {T} != {gh}*{gw} ({gh*gw})"
+
+    # reshape to a spatial grid so a CNN can read it directly
+    feats = feats.view(gh, gw, D)
+
+    return feats.cpu().half().numpy()  # [gh, gw, D], float16
+
 
 @torch.no_grad()
 def encode_text(text: str):
@@ -130,29 +147,34 @@ if __name__ == "__main__":
             cat_bboxes = [bb for obj, bb in zip(objects, bboxes) if obj == cat]
 
             # heatmap for this category in this crop
-            mask255, _ = make_tile_binary_heatmap(W, H, TILE, cat_bboxes, original_w, original_h, cx0, cy0)
-            heat01 = (mask255 > 0).astype(np.uint8)
-
-            # compute embeddings once for the crop + the positive/negative words
-            img_emb = encode_image(cropped_img)                 # [D]
+            mask255, grid01 = make_tile_binary_heatmap(W, H, PATCHES, cat_bboxes, original_w, original_h, cx0, cy0)
+            heat01 = grid01.astype(np.uint8)  # <- shape (H//16, W//16)
+        
             pos_txt_emb = encode_text(cat)                      # [D]
+            img_tokens = encode_image(cropped_img)  # [gh, gw, D] float16
+
+            gh, gw, D = img_tokens.shape
+            assert heat01.shape == (gh, gw), f"heatmap {heat01.shape} != tokens {(gh, gw)}"
 
             # ----- save POSITIVE -----
             out_base = f"{i:05d}_{cat.replace(' ', '_')}"
             np.savez_compressed(
                 os.path.join(OUT_DIR, f"{out_base}.npz"),
                 heatmap=heat01.astype(np.uint8),  # HxW {0,1}
-                img_emb=img_emb,                  # float16 [D]
-                txt_emb=pos_txt_emb,              # float16 [D]
+                img_tokens=img_tokens,            # [gh, gw, D] float16
+                txt_emb=pos_txt_emb,              # [D] float16
             )
 
-            # ----- save NEGATIVE: least-similar word + zero heatmap (same crop) -----
+            # ----- save NEGATIVE -----
             d = PMI.get(cat, {})
             neg_word = (min(d, key=d.get) if d else "none")
             neg_txt_emb = encode_text(neg_word)
             np.savez_compressed(
                 os.path.join(OUT_DIR, f"{i:05d}_{neg_word.replace(' ', '_')}__neg.npz"),
                 heatmap=np.zeros_like(heat01, dtype=np.uint8),  # HxW zeros
-                img_emb=img_emb,                                 # same image emb
+                img_tokens=img_tokens,                           # same tokens
                 txt_emb=neg_txt_emb,                             # negative text emb
             )
+
+
+            print(f"Saved {i} image pair.")

@@ -1,220 +1,170 @@
-#!/usr/bin/env python3
-import os
-import re
-import glob
-import time
-import pickle
-import bisect
-
+# test_with_prompt.py
+import argparse, os
+import numpy as np
+from PIL import Image
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from torch.optim import AdamW
-from transformers import AutoModel
-from tqdm import tqdm
-import wandb
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
+from transformers import AutoModel, AutoProcessor
 
-# ─── CONSTANTS ────────────────────────────────────────────────────────────────
-DATASET_DIR               = "dataset_1_2_5_3000"
-MODEL_ID                  = "google/siglip2-base-patch16-224"
-GRID_SIZE                 = 14
-EMBED_DIM                 = 768
-NUM_HEADS                 = 2
-NUM_LAYERS                = 4
-LEARNING_RATE             = 6.9e-5
-BATCH_SIZE                = 256
-EPOCHS                    = 10
-LOG_IMAGES_EVERY_N_STEPS  = 10
-LOG_EVERY_N_STEPS         = 5
-KEEP_LAST_N_EPOCH_WEIGHTS = 3
-
-# ─── DATASET ──────────────────────────────────────────────────────────────────
-class PreprocessedDataset(Dataset):
-    def __init__(self, pkl_dir):
-        files = sorted(
-            os.path.join(pkl_dir, fn)
-            for fn in os.listdir(pkl_dir)
-            if fn.endswith(".pkl")
-        )
-        if not files:
-            raise RuntimeError(f"No .pkl files found in {pkl_dir}")
-        self.batch_files = files
-
-        self.cum_counts = [0]
-        for path in self.batch_files:
-            with open(path, "rb") as f:
-                batch = pickle.load(f)
-            self.cum_counts.append(self.cum_counts[-1] + len(batch))
-
-        print(f"Found {len(self.batch_files)} batch files, total samples: {self.cum_counts[-1]}")
-
-    def __len__(self):
-        return self.cum_counts[-1]
-
-    def __getitem__(self, idx):
-        if idx < 0 or idx >= len(self):
-            raise IndexError(idx)
-        batch_idx = bisect.bisect_right(self.cum_counts, idx) - 1
-        sample_idx = idx - self.cum_counts[batch_idx]
-        with open(self.batch_files[batch_idx], "rb") as f:
-            batch = pickle.load(f)
-        return batch[sample_idx]
-
-def collate_fn(batch):
-    return {
-        "pixel_values":   torch.stack([x["pixel_values"]   for x in batch]),
-        "input_ids":      torch.stack([x["input_ids"]      for x in batch]),
-        "attention_mask": torch.stack([x["attention_mask"] for x in batch]),
-        "target_heatmap": torch.stack([x["target_heatmap"] for x in batch]),
-    }
-
-# ─── MODEL ────────────────────────────────────────────────────────────────────
-class LocalizationDecoder(nn.Module):
-    def __init__(self, embed_dim, num_heads, num_layers, grid_size):
+# ───────────────────────────────────────────────────────────────────
+# Model (same as training)
+# ───────────────────────────────────────────────────────────────────
+class TokenUNetTiny(nn.Module):
+    def __init__(self, in_ch, mid=128):
         super().__init__()
-        self.query_token = nn.Parameter(torch.randn(1, 1, embed_dim))
-        dec_layer = nn.TransformerDecoderLayer(
-            d_model=embed_dim,
-            nhead=num_heads,
-            batch_first=True,
-            dropout=0.1,
-            activation='gelu',
-        )
-        self.decoder = nn.TransformerDecoder(dec_layer, num_layers=num_layers)
-        self.head    = nn.Linear(embed_dim, grid_size * grid_size)
+        self.reduce = nn.Conv2d(in_ch, mid, 1)
+        self.block1 = nn.Sequential(nn.Conv2d(mid, mid, 3, padding=1),
+                                    nn.GroupNorm(8, mid), nn.GELU())
+        self.block2 = nn.Sequential(nn.Conv2d(mid, mid, 3, padding=2, dilation=2),
+                                    nn.GroupNorm(8, mid), nn.GELU())
+        self.block3 = nn.Sequential(nn.Conv2d(mid, mid, 3, padding=1),
+                                    nn.GroupNorm(8, mid), nn.GELU())
+        self.out = nn.Conv2d(mid, 1, 1)
+    def forward(self, x):  # [B,D,H,W]
+        x = self.reduce(x)
+        x = self.block1(x) + x
+        x = self.block2(x) + x
+        x = self.block3(x)
+        return self.out(x).squeeze(1)  # [B,H,W]
 
-    def forward(self, text_vec, patch_vecs):
-        q   = self.query_token + text_vec.unsqueeze(1)
-        out = self.decoder(tgt=q, memory=patch_vecs)
-        return self.head(out.squeeze(1))
+# ───────────────────────────────────────────────────────────────────
+# SigLIP2 encoding (image patches + text emb)
+# ───────────────────────────────────────────────────────────────────
+PATCHES = 16
 
-# ─── CHECKPOINT / W&B HELPERS ────────────────────────────────────────────────
-def save_weights(decoder, epoch, run):
-    import torch, wandb, os
+def stretch_to_multiple(img):
+    W, H = img.size
+    newW = ((W + PATCHES - 1) // PATCHES) * PATCHES
+    newH = ((H + PATCHES - 1) // PATCHES) * PATCHES
+    if (newW, newH) == (W, H):
+        return img
+    return img.resize((newW, newH), Image.Resampling.BILINEAR)
 
-    epoch = int(epoch)
-    fname = f"decoder_epoch{epoch}.pth"
-    torch.save(decoder.state_dict(), fname)
+def build_siglip2(ckpt, device):
+    dtype = torch.float16 if str(device).startswith("cuda") else torch.float32
+    model = AutoModel.from_pretrained(ckpt, dtype=dtype).to(device).eval()
+    proc  = AutoProcessor.from_pretrained(ckpt)
+    return model, proc, dtype
 
-    # upload new checkpoint
-    wandb.save(fname, policy="now")
+@torch.no_grad()
+def encode_image_grid(pil_img, siglip, processor, device):
+    pil_img = stretch_to_multiple(pil_img)
+    gh, gw = pil_img.height // PATCHES, pil_img.width // PATCHES
+    batch = processor(images=pil_img, return_tensors="pt",
+                      do_resize=False, max_num_patches=4096)
+    batch = {k: v.to(device) for k, v in batch.items()}
+    out = siglip.vision_model(pixel_values=batch["pixel_values"],
+                              attention_mask=batch["pixel_attention_mask"],
+                              spatial_shapes=batch["spatial_shapes"])
+    feats = out.last_hidden_state[0].float()            # [T, D] (on device)
+    mask  = batch["pixel_attention_mask"][0].bool()     # [T]
+    feats = feats[mask]                                  # [gh*gw, D]
+    assert feats.shape[0] == gh * gw, f"T={feats.shape[0]} != {gh*gw}"
+    feats = feats.view(gh, gw, -1)                       # [gh,gw,D]
+    return feats  # float32 (on device)
 
-    # delete old checkpoint locally
-    if os.path.exists(f"decoder_epoch{epoch - 1}.pth"):
-        os.remove(f"decoder_epoch{epoch - 1}.pth")
+@torch.no_grad()
+def encode_text_vec(text, siglip, processor, device):
+    toks = processor(text=[text], return_tensors="pt",
+                     padding=True, truncation=True)
+    toks = {k: v.to(device) for k, v in toks.items()
+            if k in ("input_ids", "attention_mask")}
+    emb = siglip.text_model(**toks).pooler_output  # [1, D]
+    emb = torch.nn.functional.normalize(emb, p=2, dim=-1)
+    return emb[0]  # [D], device tensor
 
-    # delete old checkpoint from W&B run files
-    try:
-        api_run = wandb.Api().run(f"{run.entity}/{run.project}/{run.id}")
-        for f in api_run.files():
-            if f.name == f"decoder_epoch{epoch - KEEP_LAST_N_EPOCH_WEIGHTS}.pth":
-                f.delete()
-                break
-    except Exception as e:
-        print(f"Failed to delete {f'decoder_epoch{epoch - KEEP_LAST_N_EPOCH_WEIGHTS}.pth'} from W&B: {e}")
+# ───────────────────────────────────────────────────────────────────
+# Viz
+# ───────────────────────────────────────────────────────────────────
+@torch.no_grad()
+def overlay_and_save(image_path, heat01, out_path, title=None):
+    img = Image.open(image_path).convert("RGB")
+    W, H = img.size
+    up = F.interpolate(heat01[None,None,...], size=(H, W),
+                       mode="bilinear", align_corners=False)[0,0].detach().cpu().numpy()
+    plt.figure(figsize=(8,6), dpi=150)
+    plt.imshow(img)
+    plt.imshow(up, cmap="jet", alpha=0.45, vmin=0.0, vmax=1.0)
+    plt.axis("off")
+    if title: plt.title(title)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    plt.savefig(out_path, bbox_inches="tight", pad_inches=0.0)
+    plt.close()
 
-
-# ─── TRAINING LOOP ────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────
+# Main
+# ───────────────────────────────────────────────────────────────────
+@torch.no_grad()
 def main():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    torch.set_num_threads(1)
-    torch.set_num_interop_threads(1)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ckpt", type=str, default="best_tokens_cnn.pt")
+    ap.add_argument("--image", type=str, default="person.jpg")
+    ap.add_argument("--prompt", type=str, default="person")
+    ap.add_argument("--siglip_ckpt", type=str, default="google/siglip2-base-patch16-naflex")
+    ap.add_argument("--out", type=str, default="overlay.png")
+    ap.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--fuse",  type=str, choices=["mul","min","max","cnn_only","text_only"], default="mul",
+                    help="How to combine CNN probs with text similarity")
+    args = ap.parse_args()
 
-    run = wandb.init(
-        project="prompt-guided-object-localizer",
-        name=f"dataset_test_decoder_e{EPOCHS}_h{NUM_HEADS}_l{NUM_LAYERS}_b{BATCH_SIZE}_lr{LEARNING_RATE}",
-        config={
-            "model_id": MODEL_ID,
-            "grid_size": GRID_SIZE,
-            "embed_dim": EMBED_DIM,
-            "num_heads": NUM_HEADS,
-            "num_layers": NUM_LAYERS,
-            "learning_rate": LEARNING_RATE,
-            "batch_size": BATCH_SIZE,
-            "epochs": EPOCHS,
-            "log_images_every": LOG_IMAGES_EVERY_N_STEPS,
-            "dataset_dir": DATASET_DIR,
-        },
-    )
-    cfg = wandb.config
+    device = args.device
 
-    siglip = AutoModel.from_pretrained(cfg.model_id).to(device)
-    for p in siglip.parameters():
-        p.requires_grad = False
+    # 1) Build encoders
+    siglip, processor, _ = build_siglip2(args.siglip_ckpt, device)
 
-    decoder = LocalizationDecoder(cfg.embed_dim, cfg.num_heads, cfg.num_layers, cfg.grid_size).to(device)
-    wandb.watch(decoder, log="all", log_freq=100)
-    optimizer = AdamW(decoder.parameters(), lr=cfg.learning_rate)
-    criterion = nn.BCEWithLogitsLoss()
+    # 2) Encode image grid and prompt (both on the SAME device)
+    pil = Image.open(args.image).convert("RGB")
+    img_grid = encode_image_grid(pil, siglip, processor, device)   # [gh,gw,D] (device)
+    gh, gw, D = img_grid.shape
+    txt = encode_text_vec(args.prompt, siglip, processor, device)  # [D] (device)
 
-    dataset = PreprocessedDataset(DATASET_DIR)
-    loader = DataLoader(
-        dataset,
-        batch_size=cfg.batch_size,
-        shuffle=True,
-        collate_fn=collate_fn,
-        num_workers=2,
-        pin_memory=True,
-    )
+    # 3) Prepare tokens for CNN (match training: only image tokens)
+    toks = img_grid.permute(2,0,1).contiguous().to(torch.float32)  # [D,gh,gw] (device)
+    toks_b = toks.unsqueeze(0)                                      # [1,D,H,W] (device)
 
-    global_step = 0
-    for epoch in range(1, cfg.epochs + 1):
-        decoder.train()
-        epoch_loss = 0.0
+    # 4) Load model + weights
+    ckpt = torch.load(args.ckpt, map_location=device)
+    in_ch = ckpt.get("in_ch", D)
+    if in_ch != D:
+        raise ValueError(f"Channel mismatch: ckpt expects in_ch={in_ch}, but SigLIP2 produced D={D}")
+    model = TokenUNetTiny(in_ch=in_ch).to(device)
+    model.load_state_dict(ckpt["model"])
+    model.eval()
 
-        for batch in tqdm(loader, desc=f"Epoch {epoch}/{cfg.epochs}"):
-            global_step += 1
-            px     = batch["pixel_values"].to(device)
-            ids    = batch["input_ids"].to(device)
-            mask   = batch["attention_mask"].to(device)
-            target = batch["target_heatmap"].to(device)
+    # 5) CNN forward → probs
+    logits = model(toks_b)                 # [1,H,W]
+    probs  = torch.sigmoid(logits)[0]      # [H,W], device
 
-            with torch.no_grad():
-                v = siglip.vision_model(pixel_values=px).last_hidden_state.float()
-                t = siglip.text_model(input_ids=ids, attention_mask=mask).pooler_output.float()
+    # 6) Text gating (all on the SAME device)
+    toks_dev = toks_b[0]                                      # [D,H,W] (device)
+    img_flat = toks_dev.view(D, -1).t()                       # [H*W, D] (device)
+    img_flat = F.normalize(img_flat, p=2, dim=-1)
+    txt_n = F.normalize(txt.to(torch.float32), p=2, dim=-1)   # [D] (device)
+    sim = torch.clamp(img_flat @ txt_n, -1.0, 1.0)            # [H*W] (device)
+    sim = (sim + 1.0) * 0.5                                   # [-1,1] → [0,1]
+    sim_map = sim.view(toks.shape[1], toks.shape[2])          # [H,W] (device)
 
-            logits = decoder(t, v)
-            loss = criterion(logits, target)
+    # 7) Fuse
+    if args.fuse == "cnn_only":
+        combined = probs
+    elif args.fuse == "text_only":
+        combined = sim_map
+    elif args.fuse == "min":
+        combined = torch.minimum(probs, sim_map)
+    elif args.fuse == "max":
+        combined = torch.maximum(probs, sim_map)
+    else:  # "mul" (default)
+        combined = probs * sim_map
 
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(decoder.parameters(), max_norm=1.0)
-            optimizer.step()
+    # Normalize for visualization
+    m, M = combined.min(), combined.max()
+    heat01 = (combined - m) / (M - m + 1e-6)
 
-            loss_val = loss.item()
-            epoch_loss += loss_val * px.size(0)
-            if global_step == 1 or global_step % LOG_EVERY_N_STEPS == 0:
-                wandb.log({"train/loss": loss_val, "step": global_step})
-
-            if global_step % cfg.log_images_every == 0:
-                try:
-                    img = batch["pixel_values"][0].cpu() * 0.5 + 0.5
-                    img = torch.clamp(img, 0, 1).permute(1, 2, 0).numpy()
-                    gt  = batch["target_heatmap"][0].view(cfg.grid_size, cfg.grid_size).cpu().numpy()
-                    pr  = torch.sigmoid(logits[0]).view(cfg.grid_size, cfg.grid_size).detach().cpu().numpy()
-
-                    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-                    axes[0].imshow(img); axes[0].set_title("Input Image"); axes[0].axis('off')
-                    axes[1].imshow(gt, vmin=0, vmax=1); axes[1].set_title("Ground Truth"); axes[1].axis('off')
-                    im = axes[2].imshow(pr, vmin=0, vmax=1); axes[2].set_title("Prediction"); axes[2].axis('off')
-                    fig.suptitle(f"Step {global_step}")
-                    fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.6)
-
-                    wandb.log({"examples/comparison": wandb.Image(fig)})
-                    plt.close(fig)
-                except Exception as e:
-                    print(f"Warning: could not log image at step {global_step}: {e}")
-
-        avg_loss = epoch_loss / len(dataset)
-        wandb.log({"train/epoch_loss": avg_loss, "epoch": epoch})
-        print(f"Epoch {epoch} complete — avg loss: {avg_loss:.4f}")
-
-        # Save → Upload → Cleanup (keep last N)
-        save_weights(decoder, epoch, run)
-
-    wandb.finish()
-    print("Training complete.")
+    # 8) Overlay (function moves to CPU for saving)
+    overlay_and_save(args.image, heat01, args.out, title=args.prompt)
+    print(f"Saved overlay to: {args.out}")
 
 if __name__ == "__main__":
     main()

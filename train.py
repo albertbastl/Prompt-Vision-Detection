@@ -1,148 +1,157 @@
-import os, glob, math
-import numpy as np
+# train_cnn_on_tokens.py
+import os, glob, argparse, numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
-TILE = 16  # must match your preprocessing stride
+# ───────────────────────────────────────────────────────────────────
+# Dataset
+# ───────────────────────────────────────────────────────────────────
+class NPZTokens(Dataset):
+    def __init__(self, root="preprocessed_dataset"):
+        self.paths = sorted(glob.glob(os.path.join(root, "*.npz")))
+        if not self.paths:
+            raise FileNotFoundError(f"No .npz found under {root}")
+    def __len__(self): return len(self.paths)
+    def __getitem__(self, i):
+        d = np.load(self.paths[i])
+        heat = torch.from_numpy(d["heatmap"].astype(np.float32))   # [H,W] {0,1}
+        toks = torch.from_numpy(d["img_tokens"]).to(torch.float32) # [H,W,D]
+        toks = toks.permute(2,0,1).contiguous()                    # [D,H,W]
+        return toks, heat
 
-# --- Dataset -----------------------------------------------------------------
-class NpzTokenDataset(Dataset):
-    def __init__(self, folder):
-        self.files = sorted([p for p in glob.glob(os.path.join(folder, "*.npz"))])
-        if not self.files:
-            raise RuntimeError(f"No .npz files in {folder}")
-    def __len__(self): return len(self.files)
+def pad_batch(batch):
+    # batch: list of (tokens[D,H,W], heat[H,W])
+    D = batch[0][0].shape[0]
+    Hs = [b[0].shape[1] for b in batch]; Ws = [b[0].shape[2] for b in batch]
+    Hm, Wm = max(Hs), max(Ws)
+    toks_pad, heat_pad, mask_pad = [], [], []
+    for tok, heat in batch:
+        pad = (0, Wm - tok.shape[2], 0, Hm - tok.shape[1])  # (W_left,W_right,H_top,H_bot)
+        toks_pad.append(F.pad(tok, pad))                    # [D,Hm,Wm]
+        heat_pad.append(F.pad(heat, pad))                   # [Hm,Wm]
+        mask = torch.ones_like(heat)                        # valid pixels
+        mask_pad.append(F.pad(mask, pad))
+    toks = torch.stack(toks_pad)                            # [B,D,Hm,Wm]
+    heat = torch.stack(heat_pad)                            # [B,Hm,Wm]
+    mask = torch.stack(mask_pad)                            # [B,Hm,Wm]
+    return toks, heat, mask
 
-    def _downsample_to_tokens(self, heat_pix):
-        # heat_pix: [H, W] (0/1). Downsample by TILE using max-pool to get [Htok, Wtok].
-        H, W = heat_pix.shape
-        assert H % TILE == 0 and W % TILE == 0, "Heatmap size must be divisible by TILE"
-        Ht, Wt = H // TILE, W // TILE
-        t = torch.from_numpy(heat_pix).float().view(Ht, TILE, Wt, TILE)
-        # max over each TILE×TILE block -> 1 if any positive pixel in the tile
-        t = t.amax(dim=(1, 3))  # [Ht, Wt]
-        return t
-
-    def __getitem__(self, idx):
-        d = np.load(self.files[idx])
-        if "img_tokens" not in d:
-            raise ValueError(f"{self.files[idx]} has no 'img_tokens'. "
-                             f"Re-run preprocessing to save per-patch tokens.")
-        img_tokens = torch.from_numpy(d["img_tokens"]).float()   # [D,Ht,Wt]
-        text_vec   = torch.from_numpy(d["text_vec"]).float()     # [D]
-        heat_pix   = d["heatmap"].astype(np.uint8)               # [H,W] pixels
-        target     = self._downsample_to_tokens(heat_pix).unsqueeze(0)  # [1,Ht,Wt]
-        return {
-            "img_tokens": img_tokens,  # [D,Ht,Wt]
-            "text_vec":   text_vec,    # [D]
-            "target":     target       # [1,Ht,Wt]
-        }
-
-def pad_collate(batch):
-    # Pad variable [Ht,Wt] to the max in this batch; create valid mask.
-    D = batch[0]["img_tokens"].shape[0]
-    Hts = [b["img_tokens"].shape[1] for b in batch]
-    Wts = [b["img_tokens"].shape[2] for b in batch]
-    Ht, Wt = max(Hts), max(Wts)
-
-    imgs, txts, tgts, masks = [], [], [], []
-    for b in batch:
-        it = b["img_tokens"]; tgt = b["target"]
-        ht, wt = it.shape[1], it.shape[2]
-        pad_h = Ht - ht; pad_w = Wt - wt
-        imgs.append(F.pad(it, (0,pad_w, 0,pad_h)))            # [D,Ht,Wt]
-        tgts.append(F.pad(tgt, (0,pad_w, 0,pad_h)))           # [1,Ht,Wt]
-        m = torch.zeros(1, Ht, Wt, dtype=torch.float32)
-        m[:, :ht, :wt] = 1.0
-        masks.append(m)
-        txts.append(b["text_vec"])
-    return {
-        "img_tokens": torch.stack(imgs, 0),   # [B,D,Ht,Wt]
-        "text_vec":   torch.stack(txts, 0),   # [B,D]
-        "target":     torch.stack(tgts, 0),   # [B,1,Ht,Wt]
-        "valid":      torch.stack(masks, 0),  # [B,1,Ht,Wt]
-    }
-
-# --- Model: FiLM-conditioned tiny CNN head -----------------------------------
-class FiLMConvLocator(nn.Module):
-    def __init__(self, d_model: int):
+# ───────────────────────────────────────────────────────────────────
+# Model: tiny conv net over tokens
+# ───────────────────────────────────────────────────────────────────
+class TokenUNetTiny(nn.Module):
+    def __init__(self, in_ch, mid=128):
         super().__init__()
-        # Map text → (gamma, beta) to modulate image tokens
-        self.film = nn.Sequential(
-            nn.Linear(d_model, d_model*2),
-            nn.GELU(),
-            nn.Linear(d_model*2, d_model*2)
+        self.reduce = nn.Conv2d(in_ch, mid, 1)
+        self.block1 = nn.Sequential(
+            nn.Conv2d(mid, mid, 3, padding=1),
+            nn.GroupNorm(8, mid), nn.GELU(),
         )
-        # Lightweight conv head
-        self.head = nn.Sequential(
-            nn.Conv2d(d_model, d_model, 3, padding=1),
-            nn.GELU(),
-            nn.Conv2d(d_model, d_model//2, 3, padding=1),
-            nn.GELU(),
-            nn.Conv2d(d_model//2, 1, 1)
+        self.block2 = nn.Sequential(
+            nn.Conv2d(mid, mid, 3, padding=2, dilation=2),
+            nn.GroupNorm(8, mid), nn.GELU(),
         )
+        self.block3 = nn.Sequential(
+            nn.Conv2d(mid, mid, 3, padding=1),
+            nn.GroupNorm(8, mid), nn.GELU(),
+        )
+        self.out = nn.Conv2d(mid, 1, 1)  # logits
+    def forward(self, x):                # x: [B,D,H,W]
+        x = self.reduce(x)
+        x = self.block1(x) + x
+        x = self.block2(x) + x
+        x = self.block3(x)
+        return self.out(x).squeeze(1)    # [B,H,W] logits
 
-    def forward(self, img_tokens: torch.Tensor, text_vec: torch.Tensor):
-        # img_tokens: [B,D,H,W], text_vec: [B,D]
-        B, D, H, W = img_tokens.shape
-        film_params = self.film(text_vec)               # [B, 2D]
-        gamma, beta = film_params.chunk(2, dim=1)       # [B,D], [B,D]
-        gamma = gamma.view(B, D, 1, 1)
-        beta  = beta.view(B, D, 1, 1)
+# ───────────────────────────────────────────────────────────────────
+# Utils
+# ───────────────────────────────────────────────────────────────────
+@torch.no_grad()
+def batch_iou(logits, target, mask, thr=0.5):
+    pred = (torch.sigmoid(logits) >= thr).float()
+    target = target.float()
+    mask = mask.float()
+    inter = ((pred * target) * mask).sum(dim=(1,2))
+    union = (((pred + target) > 0).float() * mask).sum(dim=(1,2))
+    iou = torch.where(union>0, inter/union, torch.ones_like(union))
+    return iou.mean().item()
 
-        feat = img_tokens * (1 + gamma) + beta         # FiLM
-        logits = self.head(feat)                       # [B,1,H,W]
-        return logits
+def make_pos_weight(y, mask):
+    # returns scalar pos_weight = neg/pos for BCEWithLogitsLoss
+    with torch.no_grad():
+        y = y.float(); mask = mask.float()
+        pos = (y*mask).sum()
+        neg = (mask.sum() - pos).clamp(min=1.0)
+        pos = pos.clamp(min=1.0)
+        return (neg/pos).detach()
 
-# --- Loss --------------------------------------------------------------------
-def heatmap_loss(logits, target, valid_mask, pos_weight=2.0):
-    # BCE with masking to ignore padded tiles
-    pw = torch.tensor(pos_weight, device=logits.device)
-    bce = F.binary_cross_entropy_with_logits(logits, target, reduction="none", pos_weight=pw)
-    loss = (bce * valid_mask).sum() / valid_mask.sum().clamp_min(1.0)
-    return loss
+# ───────────────────────────────────────────────────────────────────
+# Train
+# ───────────────────────────────────────────────────────────────────
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", type=str, default="preprocessed_dataset")
+    ap.add_argument("--epochs", type=int, default=1000)
+    ap.add_argument("--bs", type=int, default=128)
+    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--num_workers", type=int, default=4)
+    ap.add_argument("--mixed", action="store_true")
+    ap.add_argument("--save", type=str, default="best_tokens_cnn.pt")
+    args = ap.parse_args()
 
-# --- Train (minimal) ---------------------------------------------------------
-def train_once(
-    data_dir,
-    d_model=768,
-    epochs=2,
-    batch_size=8,
-    lr=1e-3,
-    device="cuda" if torch.cuda.is_available() else "cpu",
-):
-    ds = NpzTokenDataset(data_dir)
-    # Infer d_model from first sample if needed
-    if d_model is None:
-        s = ds[0]["img_tokens"]; d_model = s.shape[0]
+    ds = NPZTokens(args.root)
+    # Peek one sample to get D
+    sample_tokens, sample_heat = ds[0]
+    D = sample_tokens.shape[0]
 
-    dl = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=4, collate_fn=pad_collate)
-    model = FiLMConvLocator(d_model).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=lr)
+    loader = DataLoader(ds, batch_size=args.bs, shuffle=True,
+                        collate_fn=pad_batch, num_workers=args.num_workers, pin_memory=True)
 
-    for epoch in range(epochs):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Using device:", device, "| CUDA available:", torch.cuda.is_available())
+    if device == "cuda":
+        print("GPU:", torch.cuda.get_device_name(0))
+    model = TokenUNetTiny(in_ch=D).to(device)
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    scaler = torch.cuda.amp.GradScaler(enabled=args.mixed and (device=="cuda"))
+
+    best_iou = -1.0
+    for epoch in range(1, args.epochs+1):
         model.train()
-        running = 0.0
-        for step, batch in enumerate(dl, 1):
-            img = batch["img_tokens"].to(device)  # [B,D,Ht,Wt]
-            txt = batch["text_vec"].to(device)    # [B,D]
-            tgt = batch["target"].to(device)      # [B,1,Ht,Wt]
-            msk = batch["valid"].to(device)       # [B,1,Ht,Wt]
+        running_loss, running_iou, steps = 0.0, 0.0, 0
+        for toks, heat, mask in loader:
+            toks = toks.to(device, non_blocking=True)   # [B,D,H,W]
+            heat = heat.to(device, non_blocking=True)   # [B,H,W]
+            mask = mask.to(device, non_blocking=True)   # [B,H,W]
 
-            opt.zero_grad()
-            logits = model(img, txt)
-            loss = heatmap_loss(logits, tgt, msk, pos_weight=2.0)
-            loss.backward()
-            opt.step()
+            pos_weight = make_pos_weight(heat, mask)
+            loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
-            running += loss.item()
-            if step % 50 == 0:
-                print(f"epoch {epoch+1}  step {step}  loss {running/50:.4f}")
-                running = 0.0
+            opt.zero_grad(set_to_none=True)
+            with torch.cuda.amp.autocast(enabled=args.mixed and (device=="cuda")):
+                logits = model(toks)                    # [B,H,W]
+                # apply mask to loss by flattening and weighting
+                loss = loss_fn(logits[mask.bool()], heat[mask.bool()])
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
 
-    return model
+            running_loss += loss.item()
+            running_iou  += batch_iou(logits.detach(), heat, mask)
+            steps += 1
+
+        avg_loss = running_loss/max(steps,1)
+        avg_iou  = running_iou/max(steps,1)
+        print(f"Epoch {epoch:02d} | loss {avg_loss:.4f} | IoU {avg_iou:.4f}")
+
+        # save best
+        if avg_iou > best_iou:
+            best_iou = avg_iou
+            torch.save({"model": model.state_dict(),
+                        "in_ch": D}, args.save)
+            print(f"  ↳ saved: {args.save} (best IoU {best_iou:.4f})")
 
 if __name__ == "__main__":
-    trained_model = train_once(data_dir="out_images", d_model=768, epochs=2, batch_size=8)
+    main()
