@@ -12,7 +12,7 @@ N = 1000
 PATCHES = 16
 MIN_CROP = 0.8
 NSD_REF = 425
-OUT_DIR = "preprocessed_dataset"
+OUT_DIR = "test"
 CKPT = "google/siglip2-base-patch16-naflex"
 
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -108,6 +108,7 @@ def encode_image(pil_img):
 
     # expect one token per 16×16 patch
     T, D = feats.shape
+    print(D)
     assert T == gh * gw, f"Token count {T} != {gh}*{gw} ({gh*gw})"
 
     # reshape to a spatial grid so a CNN can read it directly
