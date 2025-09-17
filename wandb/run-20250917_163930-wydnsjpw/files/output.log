@@ -1,0 +1,71 @@
+Epoch 01 | train loss 0.3843 mIoU 0.4933 | val loss 0.3245 mIoU 0.4904
+Epoch 02 | train loss 0.3458 mIoU 0.4613 | val loss 0.3429 mIoU 0.4904
+Epoch 03 | train loss 0.3161 mIoU 0.4807 | val loss 0.3403 mIoU 0.5106
+Epoch 04 | train loss 0.3009 mIoU 0.4888 | val loss 0.2866 mIoU 0.5204
+Epoch 05 | train loss 0.2889 mIoU 0.4793 | val loss 0.2719 mIoU 0.5187
+Epoch 06 | train loss 0.2772 mIoU 0.4788 | val loss 0.2683 mIoU 0.4981
+Epoch 07 | train loss 0.2675 mIoU 0.4811 | val loss 0.2519 mIoU 0.5286
+Epoch 08 | train loss 0.2546 mIoU 0.4763 | val loss 0.2468 mIoU 0.5316
+Epoch 09 | train loss 0.2461 mIoU 0.4763 | val loss 0.2463 mIoU 0.5325
+Epoch 10 | train loss 0.2391 mIoU 0.4816 | val loss 0.2419 mIoU 0.5302
+Epoch 11 | train loss 0.2287 mIoU 0.4941 | val loss 0.2351 mIoU 0.5203
+Epoch 12 | train loss 0.2212 mIoU 0.4914 | val loss 0.2385 mIoU 0.5089
+Epoch 13 | train loss 0.2146 mIoU 0.5010 | val loss 0.2343 mIoU 0.5307
+Epoch 14 | train loss 0.2069 mIoU 0.5050 | val loss 0.2289 mIoU 0.5303
+Epoch 15 | train loss 0.1992 mIoU 0.5126 | val loss 0.2213 mIoU 0.5293
+Epoch 16 | train loss 0.1948 mIoU 0.5247 | val loss 0.2254 mIoU 0.5475
+Epoch 17 | train loss 0.1861 mIoU 0.5276 | val loss 0.2204 mIoU 0.5422
+Epoch 18 | train loss 0.1816 mIoU 0.5328 | val loss 0.2331 mIoU 0.5299
+Epoch 19 | train loss 0.1758 mIoU 0.5444 | val loss 0.2352 mIoU 0.5261
+Epoch 20 | train loss 0.1697 mIoU 0.5453 | val loss 0.2289 mIoU 0.5373
+Epoch 21 | train loss 0.1661 mIoU 0.5569 | val loss 0.2263 mIoU 0.5319
+Epoch 22 | train loss 0.1619 mIoU 0.5566 | val loss 0.2234 mIoU 0.5446
+Epoch 23 | train loss 0.1585 mIoU 0.5635 | val loss 0.2267 mIoU 0.5284
+Epoch 24 | train loss 0.1555 mIoU 0.5672 | val loss 0.2204 mIoU 0.5454
+Epoch 25 | train loss 0.1503 mIoU 0.5821 | val loss 0.2257 mIoU 0.5477
+Epoch 26 | train loss 0.1473 mIoU 0.5802 | val loss 0.2207 mIoU 0.5491
+Epoch 27 | train loss 0.1446 mIoU 0.5811 | val loss 0.2206 mIoU 0.5501
+Epoch 28 | train loss 0.1416 mIoU 0.5884 | val loss 0.2238 mIoU 0.5370
+Epoch 29 | train loss 0.1386 mIoU 0.5963 | val loss 0.2296 mIoU 0.5684
+Epoch 30 | train loss 0.1372 mIoU 0.5950 | val loss 0.2425 mIoU 0.5574
+Epoch 31 | train loss 0.1345 mIoU 0.5948 | val loss 0.2243 mIoU 0.5490
+Epoch 32 | train loss 0.1306 mIoU 0.6047 | val loss 0.2484 mIoU 0.5385
+Epoch 33 | train loss 0.1281 mIoU 0.6084 | val loss 0.2231 mIoU 0.5436
+Epoch 34 | train loss 0.1262 mIoU 0.6078 | val loss 0.2241 mIoU 0.5587
+Epoch 35 | train loss 0.1242 mIoU 0.6142 | val loss 0.2286 mIoU 0.5674
+Epoch 36 | train loss 0.1216 mIoU 0.6173 | val loss 0.2345 mIoU 0.5499
+Epoch 37 | train loss 0.1191 mIoU 0.6205 | val loss 0.2370 mIoU 0.5597
+Epoch 38 | train loss 0.1171 mIoU 0.6236 | val loss 0.2315 mIoU 0.5578
+Epoch 39 | train loss 0.1153 mIoU 0.6302 | val loss 0.2395 mIoU 0.5613
+Epoch 40 | train loss 0.1143 mIoU 0.6295 | val loss 0.2375 mIoU 0.5492
+Epoch 41 | train loss 0.1110 mIoU 0.6278 | val loss 0.2585 mIoU 0.5657
+Epoch 42 | train loss 0.1110 mIoU 0.6310 | val loss 0.2548 mIoU 0.5709
+Epoch 43 | train loss 0.1086 mIoU 0.6270 | val loss 0.2601 mIoU 0.5486
+Epoch 44 | train loss 0.1076 mIoU 0.6395 | val loss 0.2761 mIoU 0.5540
+Epoch 45 | train loss 0.1049 mIoU 0.6403 | val loss 0.2601 mIoU 0.5507
+Traceback (most recent call last):
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 198, in <module>
+    main()
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 144, in main
+    loss.backward()
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/_tensor.py", line 647, in backward
+    torch.autograd.backward(
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/autograd/__init__.py", line 354, in backward
+    _engine_run_backward(
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/autograd/graph.py", line 829, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 198, in <module>
+    main()
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 144, in main
+    loss.backward()
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/_tensor.py", line 647, in backward
+    torch.autograd.backward(
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/autograd/__init__.py", line 354, in backward
+    _engine_run_backward(
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/autograd/graph.py", line 829, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

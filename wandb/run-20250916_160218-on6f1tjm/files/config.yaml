@@ -1,0 +1,62 @@
+_wandb:
+    value:
+        cli_version: 0.21.1
+        e:
+            052oqtvhly9rz1zljraytljbaz2v0bpt:
+                codePath: train.py
+                codePathLocal: train.py
+                cpu_count: 10
+                cpu_count_logical: 16
+                cudaVersion: "12.4"
+                disk:
+                    /:
+                        total: "1005867986944"
+                        used: "582957481984"
+                email: albert.bastl@protonmail.com
+                executable: /bin/python
+                git:
+                    commit: a04c1ee83eb12e7a71a8e1592181785554320f9d
+                    remote: https://mrs.fel.cvut.cz/gitlab/bastlalb/prompt-guided-object-localizer.git
+                gpu: NVIDIA GeForce RTX 4060 Laptop GPU
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 3072
+                      memoryTotal: "8585740288"
+                      name: NVIDIA GeForce RTX 4060 Laptop GPU
+                      uuid: GPU-e32788e6-a31a-2b33-723f-de0dd75774d4
+                host: hp-victus
+                memory:
+                    total: "33333719040"
+                os: Linux-6.14.0-27-generic-x86_64-with-glibc2.39
+                program: /home/albertbastl/mrs/naflex_localization/train.py
+                python: CPython 3.12.3
+                root: /home/albertbastl/mrs/naflex_localization
+                startedAt: "2025-09-16T14:02:18.895839Z"
+                writerId: 052oqtvhly9rz1zljraytljbaz2v0bpt
+        m: []
+        python_version: 3.12.3
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "3":
+                - 13
+                - 16
+            "4": 3.12.3
+            "5": 0.21.1
+            "12": 0.21.1
+            "13": linux-x86_64
+bs:
+    value: 1
+epochs:
+    value: 1000
+in_dim_2D:
+    value: 1536
+lr:
+    value: 0.001
+root:
+    value: preprocessed_dataset
+thresh:
+    value: 0.5

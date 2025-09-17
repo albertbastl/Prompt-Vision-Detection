@@ -8,14 +8,16 @@ import torch
 from transformers import AutoModel, AutoProcessor
 
 # ─── SETTINGS ──────────────────────────────────────────────────────
-N = 1000
+N = 1000              # number of TRAIN images to process
+VAL_N = 100           # number of VALIDATION (from test split) images to process
 PATCHES = 16
 MIN_CROP = 0.8
 NSD_REF = 425
-OUT_DIR = "test"
+OUT_DIR = "preprocessed_dataset"  # base dir; will create train/ and val/ inside
 CKPT = "google/siglip2-base-patch16-naflex"
 
-os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs(os.path.join(OUT_DIR, "train"), exist_ok=True)
+os.makedirs(os.path.join(OUT_DIR, "val"), exist_ok=True)
 
 # ─── LOAD PMI (least-similar negatives) ────────────────────────────
 with open("./words/pmi.json", "r") as f:
@@ -108,14 +110,12 @@ def encode_image(pil_img):
 
     # expect one token per 16×16 patch
     T, D = feats.shape
-    print(D)
     assert T == gh * gw, f"Token count {T} != {gh}*{gw} ({gh*gw})"
 
     # reshape to a spatial grid so a CNN can read it directly
     feats = feats.view(gh, gw, D)
 
     return feats.cpu().half().numpy()  # [gh, gw, D], float16
-
 
 @torch.no_grad()
 def encode_text(text: str):
@@ -125,12 +125,12 @@ def encode_text(text: str):
     emb = torch.nn.functional.normalize(emb, p=2, dim=-1)
     return emb.squeeze(0).cpu().half().numpy()              # [D]
 
+# ─── CORE PROCESSOR ────────────────────────────────────────────────
+def process_split(split_name: str, max_items: int, subdir: str):
+    out_dir = os.path.join(OUT_DIR, subdir)
+    ds = load_dataset("clane9/NSD-Flat", split=split_name, streaming=True)
 
-# ─── MAIN LOOP ──────────────────────────────────────────────────────
-if __name__ == "__main__":
-    ds = load_dataset("clane9/NSD-Flat", split="train", streaming=True)
-
-    for i, sample in enumerate(itertools.islice(ds, N)):
+    for i, sample in enumerate(itertools.islice(ds, max_items)):
         img = stretch_to_multiple(sample["image"])
         original_w, original_h = img.size  # stretched dims
 
@@ -148,11 +148,11 @@ if __name__ == "__main__":
             cat_bboxes = [bb for obj, bb in zip(objects, bboxes) if obj == cat]
 
             # heatmap for this category in this crop
-            mask255, grid01 = make_tile_binary_heatmap(W, H, PATCHES, cat_bboxes, original_w, original_h, cx0, cy0)
+            _, grid01 = make_tile_binary_heatmap(W, H, PATCHES, cat_bboxes, original_w, original_h, cx0, cy0)
             heat01 = grid01.astype(np.uint8)  # <- shape (H//16, W//16)
         
             pos_txt_emb = encode_text(cat)                      # [D]
-            img_tokens = encode_image(cropped_img)  # [gh, gw, D] float16
+            img_tokens = encode_image(cropped_img)              # [gh, gw, D] float16
 
             gh, gw, D = img_tokens.shape
             assert heat01.shape == (gh, gw), f"heatmap {heat01.shape} != tokens {(gh, gw)}"
@@ -160,7 +160,7 @@ if __name__ == "__main__":
             # ----- save POSITIVE -----
             out_base = f"{i:05d}_{cat.replace(' ', '_')}"
             np.savez_compressed(
-                os.path.join(OUT_DIR, f"{out_base}.npz"),
+                os.path.join(out_dir, f"{out_base}.npz"),
                 heatmap=heat01.astype(np.uint8),  # HxW {0,1}
                 img_tokens=img_tokens,            # [gh, gw, D] float16
                 txt_emb=pos_txt_emb,              # [D] float16
@@ -171,11 +171,20 @@ if __name__ == "__main__":
             neg_word = (min(d, key=d.get) if d else "none")
             neg_txt_emb = encode_text(neg_word)
             np.savez_compressed(
-                os.path.join(OUT_DIR, f"{i:05d}_{neg_word.replace(' ', '_')}__neg.npz"),
+                os.path.join(out_dir, f"{i:05d}_{neg_word.replace(' ', '_')}__neg.npz"),
                 heatmap=np.zeros_like(heat01, dtype=np.uint8),  # HxW zeros
                 img_tokens=img_tokens,                           # same tokens
                 txt_emb=neg_txt_emb,                             # negative text emb
             )
 
+        print(f"[{subdir}] Saved {i} image pair(s).")
 
-            print(f"Saved {i} image pair.")
+# ─── MAIN ──────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    # TRAIN (from 'train' split)
+    if N and N > 0:
+        process_split("train", N, "train")
+
+    # VALIDATION (from 'test' split)
+    if VAL_N and VAL_N > 0:
+        process_split("test", VAL_N, "val")

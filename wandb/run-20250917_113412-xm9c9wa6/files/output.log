@@ -1,0 +1,139 @@
+Epoch 01 | train loss 0.3742 mIoU 0.4543 | val loss 0.3251 mIoU 0.4788
+Epoch 02 | train loss 0.3340 mIoU 0.4372 | val loss 0.2935 mIoU 0.3937
+Epoch 03 | train loss 0.3097 mIoU 0.4556 | val loss 0.3036 mIoU 0.4462
+Epoch 04 | train loss 0.2921 mIoU 0.4704 | val loss 0.2884 mIoU 0.4164
+Epoch 05 | train loss 0.2820 mIoU 0.4712 | val loss 0.2675 mIoU 0.4926
+Epoch 06 | train loss 0.2720 mIoU 0.4720 | val loss 0.2641 mIoU 0.4288
+Epoch 07 | train loss 0.2623 mIoU 0.4772 | val loss 0.2519 mIoU 0.5008
+Epoch 08 | train loss 0.2521 mIoU 0.4754 | val loss 0.2534 mIoU 0.4938
+Epoch 09 | train loss 0.2415 mIoU 0.4869 | val loss 0.2505 mIoU 0.4824
+Epoch 10 | train loss 0.2335 mIoU 0.4927 | val loss 0.2506 mIoU 0.4467
+Epoch 11 | train loss 0.2255 mIoU 0.4986 | val loss 0.2507 mIoU 0.4724
+Epoch 12 | train loss 0.2181 mIoU 0.5120 | val loss 0.2495 mIoU 0.4708
+Epoch 13 | train loss 0.2094 mIoU 0.5235 | val loss 0.2500 mIoU 0.4883
+Epoch 14 | train loss 0.2028 mIoU 0.5281 | val loss 0.2417 mIoU 0.4615
+Epoch 15 | train loss 0.1957 mIoU 0.5385 | val loss 0.2444 mIoU 0.4725
+Epoch 16 | train loss 0.1896 mIoU 0.5502 | val loss 0.2471 mIoU 0.4712
+Epoch 17 | train loss 0.1818 mIoU 0.5571 | val loss 0.2486 mIoU 0.4528
+Epoch 18 | train loss 0.1750 mIoU 0.5608 | val loss 0.2483 mIoU 0.4822
+Epoch 19 | train loss 0.1704 mIoU 0.5685 | val loss 0.2471 mIoU 0.5029
+Epoch 20 | train loss 0.1647 mIoU 0.5779 | val loss 0.2703 mIoU 0.4338
+Epoch 21 | train loss 0.1602 mIoU 0.5837 | val loss 0.2576 mIoU 0.4919
+Epoch 22 | train loss 0.1548 mIoU 0.5923 | val loss 0.2576 mIoU 0.5051
+Epoch 23 | train loss 0.1514 mIoU 0.5979 | val loss 0.2571 mIoU 0.4703
+Epoch 24 | train loss 0.1466 mIoU 0.6006 | val loss 0.2704 mIoU 0.4806
+Epoch 25 | train loss 0.1435 mIoU 0.6066 | val loss 0.2689 mIoU 0.4779
+Epoch 26 | train loss 0.1402 mIoU 0.6108 | val loss 0.2724 mIoU 0.4628
+Epoch 27 | train loss 0.1352 mIoU 0.6252 | val loss 0.2761 mIoU 0.4591
+Epoch 28 | train loss 0.1346 mIoU 0.6235 | val loss 0.2801 mIoU 0.4314
+Epoch 29 | train loss 0.1289 mIoU 0.6345 | val loss 0.2755 mIoU 0.4516
+Epoch 30 | train loss 0.1272 mIoU 0.6327 | val loss 0.2821 mIoU 0.4329
+Epoch 31 | train loss 0.1236 mIoU 0.6450 | val loss 0.2934 mIoU 0.4733
+Epoch 32 | train loss 0.1207 mIoU 0.6446 | val loss 0.2953 mIoU 0.4478
+Epoch 33 | train loss 0.1197 mIoU 0.6443 | val loss 0.3037 mIoU 0.4674
+Epoch 34 | train loss 0.1151 mIoU 0.6566 | val loss 0.3019 mIoU 0.4730
+Epoch 35 | train loss 0.1138 mIoU 0.6585 | val loss 0.3056 mIoU 0.4590
+Epoch 36 | train loss 0.1108 mIoU 0.6606 | val loss 0.3144 mIoU 0.4409
+Epoch 37 | train loss 0.1090 mIoU 0.6658 | val loss 0.3238 mIoU 0.4541
+Epoch 38 | train loss 0.1049 mIoU 0.6726 | val loss 0.3204 mIoU 0.4285
+Epoch 39 | train loss 0.1032 mIoU 0.6765 | val loss 0.3330 mIoU 0.4337
+Epoch 40 | train loss 0.1008 mIoU 0.6804 | val loss 0.3368 mIoU 0.4381
+Epoch 41 | train loss 0.1007 mIoU 0.6837 | val loss 0.3381 mIoU 0.4305
+Epoch 42 | train loss 0.0980 mIoU 0.6874 | val loss 0.3459 mIoU 0.4403
+Epoch 43 | train loss 0.0955 mIoU 0.6961 | val loss 0.3606 mIoU 0.4658
+Epoch 44 | train loss 0.0938 mIoU 0.6956 | val loss 0.3591 mIoU 0.4286
+Epoch 45 | train loss 0.0927 mIoU 0.6961 | val loss 0.3617 mIoU 0.4294
+Epoch 46 | train loss 0.0898 mIoU 0.7019 | val loss 0.3704 mIoU 0.4077
+Epoch 47 | train loss 0.0892 mIoU 0.7053 | val loss 0.3726 mIoU 0.4514
+Epoch 48 | train loss 0.0874 mIoU 0.7053 | val loss 0.3769 mIoU 0.4258
+Epoch 49 | train loss 0.0856 mIoU 0.7149 | val loss 0.3931 mIoU 0.4253
+Epoch 50 | train loss 0.0837 mIoU 0.7125 | val loss 0.3923 mIoU 0.4105
+Epoch 51 | train loss 0.0825 mIoU 0.7183 | val loss 0.4062 mIoU 0.4193
+Epoch 52 | train loss 0.0803 mIoU 0.7178 | val loss 0.4094 mIoU 0.4238
+Epoch 53 | train loss 0.0795 mIoU 0.7251 | val loss 0.4101 mIoU 0.4118
+Epoch 54 | train loss 0.0786 mIoU 0.7237 | val loss 0.4081 mIoU 0.4121
+Epoch 55 | train loss 0.0762 mIoU 0.7315 | val loss 0.4202 mIoU 0.4150
+Epoch 56 | train loss 0.0769 mIoU 0.7330 | val loss 0.4399 mIoU 0.4104
+Epoch 57 | train loss 0.0739 mIoU 0.7453 | val loss 0.4320 mIoU 0.4078
+Epoch 58 | train loss 0.0740 mIoU 0.7362 | val loss 0.4385 mIoU 0.3767
+Epoch 59 | train loss 0.0722 mIoU 0.7382 | val loss 0.4442 mIoU 0.3972
+Epoch 60 | train loss 0.0727 mIoU 0.7450 | val loss 0.4563 mIoU 0.3956
+Epoch 61 | train loss 0.0700 mIoU 0.7493 | val loss 0.4626 mIoU 0.3792
+Epoch 62 | train loss 0.0688 mIoU 0.7518 | val loss 0.4681 mIoU 0.3846
+Epoch 63 | train loss 0.0684 mIoU 0.7506 | val loss 0.4762 mIoU 0.4147
+Epoch 64 | train loss 0.0682 mIoU 0.7565 | val loss 0.4859 mIoU 0.4064
+Epoch 65 | train loss 0.0662 mIoU 0.7626 | val loss 0.4880 mIoU 0.4165
+Epoch 66 | train loss 0.0647 mIoU 0.7628 | val loss 0.5225 mIoU 0.3600
+Epoch 67 | train loss 0.0641 mIoU 0.7573 | val loss 0.5119 mIoU 0.3819
+Epoch 68 | train loss 0.0630 mIoU 0.7654 | val loss 0.5243 mIoU 0.3970
+Epoch 69 | train loss 0.0635 mIoU 0.7618 | val loss 0.5164 mIoU 0.4197
+Epoch 70 | train loss 0.0606 mIoU 0.7650 | val loss 0.5371 mIoU 0.4064
+Epoch 71 | train loss 0.0614 mIoU 0.7675 | val loss 0.5431 mIoU 0.4158
+Traceback (most recent call last):
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 191, in <module>
+    main()
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 135, in main
+    logits = model(x)                  # [1, gh, gw]
+             ^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 47, in forward
+    probs = self.layers(x)           # [B*gh*gw, 1]
+            ^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 191, in <module>
+    main()
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 135, in main
+    logits = model(x)                  # [1, gh, gw]
+             ^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 47, in forward
+    probs = self.layers(x)           # [B*gh*gw, 1]
+            ^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/albertbastl/.local/lib/python3.12/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

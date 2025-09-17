@@ -1,17 +1,15 @@
-# train_linear_decoder.py
+# train_tile_decoder.py
 import os, glob, argparse, random
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
-# -------------------------
-# Dataset: loads .npz pairs
-# label = 1 if any heatmap tile == 1, else 0
-# x = concat(mean_pool(img_tokens), txt_emb) -> [1536]
-# -------------------------
-class NPZPairs(Dataset):
-    def __init__(self, root="preprocessed_dataset"):
+# =========================
+# Dataset (per-tile training)
+# =========================
+class NPZGrid(Dataset):
+    def __init__(self, root):
         self.paths = sorted(glob.glob(os.path.join(root, "*.npz")))
         if not self.paths:
             raise FileNotFoundError(f"No .npz found under {root}")
@@ -20,75 +18,181 @@ class NPZPairs(Dataset):
 
     def __getitem__(self, i):
         d = np.load(self.paths[i])
-        # img_tokens: [gh, gw, D] (float16) -> mean-pool -> [D]
-        img_feat = d["img_tokens"].astype(np.float32).mean(axis=(0,1))
-        # txt_emb: [D] (float16) -> [D]
-        txt_feat = d["txt_emb"].astype(np.float32)
-        x = np.concatenate([img_feat, txt_feat], axis=0).astype(np.float32)  # [2D]
-        # heatmap: [gh, gw] uint8 -> label {0,1}
-        y = np.array([1.0 if d["heatmap"].any() else 0.0], dtype=np.float32)
+        img_tokens = d["img_tokens"].astype(np.float32)   # [gh, gw, D]
+        txt_emb    = d["txt_emb"].astype(np.float32)      # [D]
+        heatmap    = d["heatmap"].astype(np.float32)      # [gh, gw] in {0,1}
+
+        gh, gw, D = img_tokens.shape
+        txt = np.broadcast_to(txt_emb, (gh, gw, D))
+        x = np.concatenate([img_tokens, txt], axis=-1)    # [gh, gw, 2D]
+        y = heatmap                                       # [gh, gw]
         return torch.from_numpy(x), torch.from_numpy(y)
 
-# -------------------------
-# Model: single linear layer
-# -------------------------
-class LinearDecoder(nn.Module):
-    def __init__(self, in_dim):
+# =========================
+# Model: Linear -> ReLU -> Linear (logits at the end)
+# =========================
+class TileDecoder(nn.Module):
+    def __init__(self, in_dim_2D):
         super().__init__()
-        self.fc = nn.Linear(in_dim, 1)
+        self.layers = nn.Sequential(
+            nn.Linear(in_dim_2D, in_dim_2D // 2),
+            nn.ReLU(),
+            nn.Dropout(0.4),
+            nn.Linear(in_dim_2D // 2, in_dim_2D // 4),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(in_dim_2D // 4, in_dim_2D // 8),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(in_dim_2D // 8, 1),
+            nn.Sigmoid()
+        )
 
-    def forward(self, x):
-        return self.fc(x).squeeze(1)  # logits
+    def forward(self, x):  # x: [B, gh, gw, 2D]
+        B, gh, gw, F = x.shape
+        x = x.view(B * gh * gw, F)
+        probs = self.layers(x)           # [B*gh*gw, 1]
+        probs = probs.view(B, gh, gw)
+        return probs
+    
+# =========================
+# Utilities
+# =========================
+def iou_from_logits(probs, y, thresh=0.5):
+    preds = (probs >= thresh).float()
+    inter = (preds * y).sum()
+    union = ((preds + y) > 0).float().sum()
+    iou = inter / union if union > 0 else torch.tensor(1.0, device=probs.device)
+    return iou.item()
 
-# -------------------------
+def seed_all(seed=42):
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+def maybe_init_wandb(args, config):
+    if not args.wandb:
+        return None
+    try:
+        import wandb
+    except ImportError:
+        print("[WARN] wandb not installed; run `pip install wandb` or set --wandb 0.")
+        return None
+    run = wandb.init(project=args.wandb_project, name=args.wandb_run, config=config)
+    return run
+
+# =========================
 # Train
-# -------------------------
+# =========================
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", type=str, default="preprocessed_dataset")
-    ap.add_argument("--epochs", type=int, default=1000)
-    ap.add_argument("--bs", type=int, default=256)
+    ap.add_argument("--root", type=str, default="preprocessed_dataset")  # base dir with train/ and val/
+    ap.add_argument("--epochs", type=int, default=100)
+    ap.add_argument("--bs", type=int, default=1, help="Variable grid sizes -> bs forced to 1.")
     ap.add_argument("--lr", type=float, default=1e-3)
-    ap.add_argument("--save", type=str, default="linear_decoder.pt")
+    ap.add_argument("--save", type=str, default="tile_decoder.pt")
+    ap.add_argument("--thresh", type=float, default=0.5, help="Mask threshold for mIoU.")
+    # wandb
+    ap.add_argument("--wandb", type=int, default=1, help="Set 1 to enable Weights & Biases logging.")
+    ap.add_argument("--wandb_project", type=str, default="simple-decoders-testing")
+    ap.add_argument("--wandb_run", type=str, default="4 linear, relu, dropout fade, sigmoid")
     args = ap.parse_args()
 
-    random.seed(42); np.random.seed(42); torch.manual_seed(42)
+    if args.bs != 1:
+        print("[INFO] Overriding --bs to 1 because samples have variable grid sizes.")
+        args.bs = 1
 
-    ds = NPZPairs(args.root)
-    # infer 2D from first sample
-    in_dim = ds[0][0].numel()
-    loader = DataLoader(ds, batch_size=args.bs, shuffle=True, num_workers=2, pin_memory=True)
+    seed_all(42)
+
+    # Data
+    train_ds = NPZGrid(os.path.join(args.root, "train"))
+    val_ds   = NPZGrid(os.path.join(args.root, "val"))
+    train_loader = DataLoader(train_ds, batch_size=1, shuffle=True,  num_workers=2, pin_memory=True)
+    val_loader   = DataLoader(val_ds,   batch_size=1, shuffle=False, num_workers=2, pin_memory=True)
+
+    # Model dims
+    sample_x, _ = train_ds[0]
+    in_dim_2D = sample_x.shape[-1]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Device:", device)
 
-    model = LinearDecoder(in_dim).to(device)
+    model = TileDecoder(in_dim_2D).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
-    bce = nn.BCEWithLogitsLoss()
+    bce = nn.BCELoss()
+
+    # wandb (optional)
+    wb = maybe_init_wandb(
+        args,
+        config=dict(
+            epochs=args.epochs, lr=args.lr, thresh=args.thresh,
+            in_dim_2D=in_dim_2D, bs=args.bs, root=args.root
+        )
+    )
 
     for epoch in range(1, args.epochs + 1):
+        # ---------- Train ----------
         model.train()
-        total_loss, total_correct, total = 0.0, 0, 0
-        for x, y in loader:
-            x = x.to(device, non_blocking=True)          # [B, 1536]
-            y = y.to(device, non_blocking=True).squeeze(1)  # [B]
+        total_loss, total_iou, n_train = 0.0, 0.0, 0
+        for x, y in train_loader:
+            x = x.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
 
             opt.zero_grad(set_to_none=True)
-            logits = model(x)                             # [B]
+            logits = model(x)                  # [1, gh, gw]
             loss = bce(logits, y)
             loss.backward()
             opt.step()
 
             with torch.no_grad():
-                total_loss += loss.item() * x.size(0)
-                preds = (torch.sigmoid(logits) >= 0.5).float()
-                total_correct += (preds == y).sum().item()
-                total += x.size(0)
+                total_loss += loss.item()
+                total_iou += iou_from_logits(logits[0], y[0], thresh=args.thresh)
+                n_train += 1
 
-        print(f"Epoch {epoch:02d} | loss {total_loss/total:.4f} | acc {total_correct/total:.4f}")
+        train_loss = total_loss / max(n_train, 1)
+        train_miou = total_iou / max(n_train, 1)
 
-    torch.save({"model": model.state_dict(), "in_dim": in_dim}, args.save)
+        # ---------- Validate ----------
+        model.eval()
+        val_loss, val_iou_sum, n_val = 0.0, 0.0, 0
+        with torch.no_grad():
+            for x, y in val_loader:
+                x = x.to(device, non_blocking=True)
+                y = y.to(device, non_blocking=True)
+
+                logits = model(x)
+                loss = bce(logits, y)
+
+                val_loss += loss.item()
+                val_iou_sum += iou_from_logits(logits[0], y[0], thresh=args.thresh)
+                n_val += 1
+
+        val_loss /= max(n_val, 1)
+        val_miou = val_iou_sum / max(n_val, 1)
+
+        print(f"Epoch {epoch:02d} | "
+              f"train loss {train_loss:.4f} mIoU {train_miou:.4f} | "
+              f"val loss {val_loss:.4f} mIoU {val_miou:.4f}")
+
+        # wandb log per-epoch
+        if wb:
+            import wandb
+            wandb.log({
+                "epoch": epoch,
+                "train/loss": train_loss,
+                "train/mIoU": train_miou,
+                "val/loss": val_loss,
+                "val/mIoU": val_miou,
+                "lr": opt.param_groups[0]["lr"],
+            })
+
+    # Save
+    torch.save({"model": model.state_dict(), "in_dim_2D": in_dim_2D, "thresh": args.thresh}, args.save)
     print(f"Saved: {args.save}")
+
+    if wb:
+        import wandb
+        wandb.finish()
 
 if __name__ == "__main__":
     main()

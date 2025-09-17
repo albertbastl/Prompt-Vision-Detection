@@ -1,0 +1,115 @@
+Epoch 01 | train loss 0.3744 mIoU 0.2926 | val loss 0.3244 mIoU 0.4280
+Epoch 02 | train loss 0.3432 mIoU 0.3914 | val loss 0.3097 mIoU 0.3906
+Epoch 03 | train loss 0.3380 mIoU 0.4056 | val loss 0.3106 mIoU 0.4495
+Epoch 04 | train loss 0.3326 mIoU 0.4174 | val loss 0.3003 mIoU 0.4264
+Epoch 05 | train loss 0.3286 mIoU 0.4227 | val loss 0.2998 mIoU 0.4908
+Epoch 06 | train loss 0.3260 mIoU 0.4242 | val loss 0.2880 mIoU 0.4322
+Epoch 07 | train loss 0.3238 mIoU 0.4315 | val loss 0.2906 mIoU 0.4425
+Epoch 08 | train loss 0.3204 mIoU 0.4295 | val loss 0.2876 mIoU 0.4662
+Epoch 09 | train loss 0.3188 mIoU 0.4327 | val loss 0.2974 mIoU 0.4657
+Epoch 10 | train loss 0.3186 mIoU 0.4358 | val loss 0.3054 mIoU 0.4164
+Epoch 11 | train loss 0.3167 mIoU 0.4429 | val loss 0.2978 mIoU 0.4409
+Epoch 12 | train loss 0.3159 mIoU 0.4408 | val loss 0.2988 mIoU 0.4825
+Epoch 13 | train loss 0.3141 mIoU 0.4405 | val loss 0.2894 mIoU 0.4743
+Epoch 14 | train loss 0.3139 mIoU 0.4368 | val loss 0.2838 mIoU 0.4758
+Epoch 15 | train loss 0.3119 mIoU 0.4494 | val loss 0.2875 mIoU 0.4478
+Epoch 16 | train loss 0.3126 mIoU 0.4413 | val loss 0.3067 mIoU 0.4262
+Epoch 17 | train loss 0.3123 mIoU 0.4494 | val loss 0.2871 mIoU 0.4608
+Epoch 18 | train loss 0.3117 mIoU 0.4527 | val loss 0.2843 mIoU 0.4461
+Epoch 19 | train loss 0.3112 mIoU 0.4482 | val loss 0.2924 mIoU 0.4274
+Epoch 20 | train loss 0.3117 mIoU 0.4472 | val loss 0.3010 mIoU 0.4366
+Epoch 21 | train loss 0.3122 mIoU 0.4497 | val loss 0.3025 mIoU 0.4825
+Epoch 22 | train loss 0.3099 mIoU 0.4490 | val loss 0.2889 mIoU 0.4431
+Epoch 23 | train loss 0.3118 mIoU 0.4523 | val loss 0.2904 mIoU 0.4544
+Epoch 24 | train loss 0.3103 mIoU 0.4526 | val loss 0.2908 mIoU 0.4498
+Epoch 25 | train loss 0.3095 mIoU 0.4471 | val loss 0.2867 mIoU 0.4726
+Epoch 26 | train loss 0.3090 mIoU 0.4454 | val loss 0.2903 mIoU 0.4686
+Epoch 27 | train loss 0.3105 mIoU 0.4527 | val loss 0.2954 mIoU 0.4676
+Epoch 28 | train loss 0.3116 mIoU 0.4519 | val loss 0.2885 mIoU 0.4745
+Epoch 29 | train loss 0.3108 mIoU 0.4502 | val loss 0.2885 mIoU 0.4569
+Epoch 30 | train loss 0.3095 mIoU 0.4498 | val loss 0.2820 mIoU 0.4787
+Epoch 31 | train loss 0.3077 mIoU 0.4535 | val loss 0.2992 mIoU 0.4268
+Epoch 32 | train loss 0.3091 mIoU 0.4495 | val loss 0.2841 mIoU 0.4812
+Epoch 33 | train loss 0.3096 mIoU 0.4556 | val loss 0.2857 mIoU 0.4621
+Epoch 34 | train loss 0.3090 mIoU 0.4485 | val loss 0.3010 mIoU 0.4907
+Epoch 35 | train loss 0.3093 mIoU 0.4473 | val loss 0.2823 mIoU 0.4718
+Epoch 36 | train loss 0.3095 mIoU 0.4552 | val loss 0.2832 mIoU 0.4696
+Epoch 37 | train loss 0.3065 mIoU 0.4497 | val loss 0.2860 mIoU 0.4795
+Epoch 38 | train loss 0.3075 mIoU 0.4562 | val loss 0.2959 mIoU 0.4539
+Epoch 39 | train loss 0.3089 mIoU 0.4518 | val loss 0.2835 mIoU 0.4709
+Epoch 40 | train loss 0.3099 mIoU 0.4544 | val loss 0.2936 mIoU 0.4334
+Epoch 41 | train loss 0.3094 mIoU 0.4578 | val loss 0.2795 mIoU 0.4729
+Epoch 42 | train loss 0.3094 mIoU 0.4502 | val loss 0.2879 mIoU 0.4763
+Epoch 43 | train loss 0.3101 mIoU 0.4539 | val loss 0.2868 mIoU 0.4663
+Epoch 44 | train loss 0.3065 mIoU 0.4562 | val loss 0.3001 mIoU 0.4948
+Epoch 45 | train loss 0.3082 mIoU 0.4592 | val loss 0.2860 mIoU 0.4991
+Epoch 46 | train loss 0.3084 mIoU 0.4549 | val loss 0.2902 mIoU 0.4571
+Epoch 47 | train loss 0.3074 mIoU 0.4547 | val loss 0.2899 mIoU 0.4622
+Epoch 48 | train loss 0.3094 mIoU 0.4583 | val loss 0.2813 mIoU 0.4605
+Epoch 49 | train loss 0.3088 mIoU 0.4560 | val loss 0.2901 mIoU 0.4834
+Epoch 50 | train loss 0.3073 mIoU 0.4576 | val loss 0.2897 mIoU 0.4612
+Epoch 51 | train loss 0.3090 mIoU 0.4541 | val loss 0.2968 mIoU 0.4472
+Epoch 52 | train loss 0.3079 mIoU 0.4536 | val loss 0.2839 mIoU 0.4788
+Epoch 53 | train loss 0.3087 mIoU 0.4553 | val loss 0.2945 mIoU 0.4491
+Epoch 54 | train loss 0.3100 mIoU 0.4543 | val loss 0.2869 mIoU 0.4923
+Epoch 55 | train loss 0.3073 mIoU 0.4560 | val loss 0.2814 mIoU 0.4651
+Epoch 56 | train loss 0.3062 mIoU 0.4545 | val loss 0.3019 mIoU 0.4376
+Epoch 57 | train loss 0.3087 mIoU 0.4585 | val loss 0.2916 mIoU 0.4539
+Epoch 58 | train loss 0.3079 mIoU 0.4569 | val loss 0.2835 mIoU 0.4909
+Epoch 59 | train loss 0.3075 mIoU 0.4578 | val loss 0.2938 mIoU 0.4225
+Epoch 60 | train loss 0.3095 mIoU 0.4484 | val loss 0.2807 mIoU 0.4758
+Epoch 61 | train loss 0.3081 mIoU 0.4587 | val loss 0.2968 mIoU 0.4455
+Epoch 62 | train loss 0.3069 mIoU 0.4592 | val loss 0.3002 mIoU 0.4645
+Epoch 63 | train loss 0.3073 mIoU 0.4576 | val loss 0.2957 mIoU 0.4250
+Epoch 64 | train loss 0.3075 mIoU 0.4602 | val loss 0.2957 mIoU 0.4400
+Epoch 65 | train loss 0.3072 mIoU 0.4585 | val loss 0.2931 mIoU 0.4371
+Epoch 66 | train loss 0.3063 mIoU 0.4564 | val loss 0.2956 mIoU 0.4502
+Epoch 67 | train loss 0.3087 mIoU 0.4555 | val loss 0.2833 mIoU 0.4708
+Epoch 68 | train loss 0.3095 mIoU 0.4531 | val loss 0.2824 mIoU 0.4555
+Epoch 69 | train loss 0.3066 mIoU 0.4568 | val loss 0.2800 mIoU 0.4614
+Epoch 70 | train loss 0.3087 mIoU 0.4569 | val loss 0.3190 mIoU 0.4869
+Epoch 71 | train loss 0.3083 mIoU 0.4554 | val loss 0.2840 mIoU 0.4842
+Epoch 72 | train loss 0.3070 mIoU 0.4632 | val loss 0.2941 mIoU 0.4929
+Epoch 73 | train loss 0.3096 mIoU 0.4563 | val loss 0.2881 mIoU 0.4616
+Epoch 74 | train loss 0.3096 mIoU 0.4565 | val loss 0.3017 mIoU 0.4710
+Epoch 75 | train loss 0.3092 mIoU 0.4559 | val loss 0.3036 mIoU 0.4309
+Epoch 76 | train loss 0.3084 mIoU 0.4555 | val loss 0.2923 mIoU 0.4557
+Epoch 77 | train loss 0.3067 mIoU 0.4584 | val loss 0.2828 mIoU 0.4921
+Epoch 78 | train loss 0.3095 mIoU 0.4623 | val loss 0.2863 mIoU 0.4495
+Epoch 79 | train loss 0.3056 mIoU 0.4600 | val loss 0.2833 mIoU 0.4947
+Epoch 80 | train loss 0.3098 mIoU 0.4595 | val loss 0.2865 mIoU 0.4774
+Epoch 81 | train loss 0.3077 mIoU 0.4548 | val loss 0.3092 mIoU 0.4781
+Epoch 82 | train loss 0.3052 mIoU 0.4570 | val loss 0.2811 mIoU 0.4589
+Epoch 83 | train loss 0.3078 mIoU 0.4620 | val loss 0.2887 mIoU 0.4674
+Epoch 84 | train loss 0.3072 mIoU 0.4614 | val loss 0.2891 mIoU 0.4659
+Epoch 85 | train loss 0.3086 mIoU 0.4572 | val loss 0.2827 mIoU 0.4553
+Epoch 86 | train loss 0.3073 mIoU 0.4636 | val loss 0.3022 mIoU 0.4854
+Epoch 87 | train loss 0.3080 mIoU 0.4564 | val loss 0.3010 mIoU 0.4311
+Epoch 88 | train loss 0.3068 mIoU 0.4574 | val loss 0.2899 mIoU 0.4493
+Epoch 89 | train loss 0.3085 mIoU 0.4580 | val loss 0.2831 mIoU 0.4925
+Epoch 90 | train loss 0.3089 mIoU 0.4605 | val loss 0.2873 mIoU 0.4374
+Epoch 91 | train loss 0.3068 mIoU 0.4594 | val loss 0.2853 mIoU 0.4601
+Epoch 92 | train loss 0.3073 mIoU 0.4532 | val loss 0.3083 mIoU 0.4326
+Epoch 93 | train loss 0.3088 mIoU 0.4579 | val loss 0.2771 mIoU 0.4806
+Epoch 94 | train loss 0.3072 mIoU 0.4608 | val loss 0.3006 mIoU 0.4675
+Epoch 95 | train loss 0.3076 mIoU 0.4543 | val loss 0.2809 mIoU 0.4794
+Epoch 96 | train loss 0.3073 mIoU 0.4597 | val loss 0.2994 mIoU 0.4264
+Epoch 97 | train loss 0.3071 mIoU 0.4609 | val loss 0.2820 mIoU 0.4807
+Epoch 98 | train loss 0.3074 mIoU 0.4588 | val loss 0.2845 mIoU 0.4817
+Epoch 99 | train loss 0.3098 mIoU 0.4628 | val loss 0.2906 mIoU 0.4460
+Epoch 100 | train loss 0.3061 mIoU 0.4626 | val loss 0.2995 mIoU 0.4838
+Epoch 101 | train loss 0.3082 mIoU 0.4565 | val loss 0.2983 mIoU 0.4345
+Traceback (most recent call last):
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 187, in <module>
+    main()
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 127, in main
+    x = x.to(device, non_blocking=True)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 187, in <module>
+    main()
+  File "/home/albertbastl/mrs/naflex_localization/train.py", line 127, in main
+    x = x.to(device, non_blocking=True)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
