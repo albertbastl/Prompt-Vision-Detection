@@ -1,0 +1,40 @@
+{
+  "os": "Linux-6.14.0-27-generic-x86_64-with-glibc2.39",
+  "python": "CPython 3.12.3",
+  "startedAt": "2025-09-18T09:38:59.949366Z",
+  "program": "/home/albertbastl/mrs/naflex_localization/train.py",
+  "codePath": "train.py",
+  "codePathLocal": "train.py",
+  "git": {
+    "remote": "https://mrs.fel.cvut.cz/gitlab/bastlalb/prompt-guided-object-localizer.git",
+    "commit": "606b11096079997863a927e2e11fae570d67ec75"
+  },
+  "email": "albert.bastl@protonmail.com",
+  "root": "/home/albertbastl/mrs/naflex_localization",
+  "host": "hp-victus",
+  "executable": "/bin/python",
+  "cpu_count": 10,
+  "cpu_count_logical": 16,
+  "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "1005867986944",
+      "used": "584461746176"
+    }
+  },
+  "memory": {
+    "total": "33333706752"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "memoryTotal": "8585740288",
+      "cudaCores": 3072,
+      "architecture": "Ada",
+      "uuid": "GPU-e32788e6-a31a-2b33-723f-de0dd75774d4"
+    }
+  ],
+  "cudaVersion": "12.4",
+  "writerId": "igqmdco4zhn8f3q55yud4q3lzs6qufs0"
+}

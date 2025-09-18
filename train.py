@@ -1,4 +1,4 @@
-# train_tile_decoder.py
+# train_tile_decoder_cnn.py
 import os, glob, argparse, random
 import numpy as np
 import torch
@@ -29,32 +29,54 @@ class NPZGrid(Dataset):
         return torch.from_numpy(x), torch.from_numpy(y)
 
 # =========================
-# Model: Linear -> ReLU -> Linear (logits at the end)
+# Model: Convolutional decoder (text-conditioned)
 # =========================
-class TileDecoder(nn.Module):
-    def __init__(self, in_dim_2D):
+class ConvTileDecoder(nn.Module):
+    """
+    Expects x: [B, gh, gw, 2D] where the last dim is [img_tokens(D) || txt_emb(D) broadcast].
+    - Splits image features and text features
+    - Projects text to D and adds it to image features (conditioning)
+    - Runs a small CNN and outputs per-tile probabilities [B, gh, gw]
+    """
+    def __init__(self, in_dim_2D: int):
         super().__init__()
-        self.layers = nn.Sequential(
-            nn.Linear(in_dim_2D, in_dim_2D // 2),
-            nn.ReLU(),
-            nn.Dropout(0.4),
-            nn.Linear(in_dim_2D // 2, in_dim_2D // 4),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(in_dim_2D // 4, in_dim_2D // 8),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(in_dim_2D // 8, 1),
-            nn.Sigmoid()
+        assert in_dim_2D % 2 == 0, "in_dim_2D must be 2*D (img D + text D)."
+        self.D = in_dim_2D // 2  # embedding dim
+
+        self.text_projection = nn.Linear(self.D, self.D)
+
+        self.conv_blocks = nn.Sequential(
+            nn.Conv2d(self.D, 512, 3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.GELU(),
+            nn.Conv2d(512, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.GELU(),
+            nn.Conv2d(256, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.GELU(),
+            nn.Conv2d(128, 1, 1),
         )
 
     def forward(self, x):  # x: [B, gh, gw, 2D]
         B, gh, gw, F = x.shape
-        x = x.view(B * gh * gw, F)
-        probs = self.layers(x)           # [B*gh*gw, 1]
-        probs = probs.view(B, gh, gw)
-        return probs
-    
+        D = self.D
+        img_feat = x[..., :D]                 # [B, gh, gw, D]
+        txt_feat = x[..., D:]                 # [B, gh, gw, D] (broadcasted spatially)
+
+        # single text vector per sample (identical across spatial dims)
+        txt_vec = txt_feat[:, 0, 0, :]        # [B, D]
+        txt_proj = self.text_projection(txt_vec)  # [B, D]
+
+        # to NCHW and add conditioning
+        img_feat = img_feat.permute(0, 3, 1, 2).contiguous()       # [B, D, gh, gw]
+        txt_map  = txt_proj[:, :, None, None].expand(B, D, gh, gw) # [B, D, gh, gw]
+        feat = img_feat + txt_map
+
+        logits = self.conv_blocks(feat)       # [B, 1, gh, gw]
+        probs  = torch.sigmoid(logits)        # BCELoss wants probabilities
+        return probs.squeeze(1)               # [B, gh, gw]
+
 # =========================
 # Utilities
 # =========================
@@ -90,12 +112,12 @@ def main():
     ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--bs", type=int, default=1, help="Variable grid sizes -> bs forced to 1.")
     ap.add_argument("--lr", type=float, default=1e-3)
-    ap.add_argument("--save", type=str, default="tile_decoder.pt")
+    ap.add_argument("--save", type=str, default="tile_decoder_cnn.pt")
     ap.add_argument("--thresh", type=float, default=0.5, help="Mask threshold for mIoU.")
     # wandb
     ap.add_argument("--wandb", type=int, default=1, help="Set 1 to enable Weights & Biases logging.")
     ap.add_argument("--wandb_project", type=str, default="simple-decoders-testing")
-    ap.add_argument("--wandb_run", type=str, default="4 linear, relu, dropout fade, sigmoid")
+    ap.add_argument("--wandb_run", type=str, default="Davids conv architekture")
     args = ap.parse_args()
 
     if args.bs != 1:
@@ -117,7 +139,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Device:", device)
 
-    model = TileDecoder(in_dim_2D).to(device)
+    model = ConvTileDecoder(in_dim_2D).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     bce = nn.BCELoss()
 
@@ -139,14 +161,14 @@ def main():
             y = y.to(device, non_blocking=True)
 
             opt.zero_grad(set_to_none=True)
-            logits = model(x)                  # [1, gh, gw]
-            loss = bce(logits, y)
+            probs = model(x)                  # [1, gh, gw]
+            loss = bce(probs, y)
             loss.backward()
             opt.step()
 
             with torch.no_grad():
                 total_loss += loss.item()
-                total_iou += iou_from_logits(logits[0], y[0], thresh=args.thresh)
+                total_iou += iou_from_logits(probs[0], y[0], thresh=args.thresh)
                 n_train += 1
 
         train_loss = total_loss / max(n_train, 1)
@@ -160,11 +182,11 @@ def main():
                 x = x.to(device, non_blocking=True)
                 y = y.to(device, non_blocking=True)
 
-                logits = model(x)
-                loss = bce(logits, y)
+                probs = model(x)
+                loss = bce(probs, y)
 
                 val_loss += loss.item()
-                val_iou_sum += iou_from_logits(logits[0], y[0], thresh=args.thresh)
+                val_iou_sum += iou_from_logits(probs[0], y[0], thresh=args.thresh)
                 n_val += 1
 
         val_loss /= max(n_val, 1)
