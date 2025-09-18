@@ -52,53 +52,94 @@ class NPZGrid(Dataset):
         return torch.from_numpy(xp), torch.from_numpy(yp), torch.from_numpy(mp)
 
 # =========================
-# Model: Convolutional decoder (text-conditioned)
+# Model: Strong CNN decoder (FiLM + Dilations + ASPP)
+# Drop-in replacement for ConvTileDecoder
 # =========================
+class ResBlock(nn.Module):
+    def __init__(self, C, dilation=1, drop=0.1, groups=8):
+        super().__init__()
+        self.depthwise = nn.Conv2d(C, C, 3, padding=dilation, dilation=dilation, groups=C, bias=False)
+        self.pointwise = nn.Conv2d(C, C, 1, bias=False)
+        self.norm = nn.GroupNorm(groups, C)
+        self.act = nn.GELU()
+        self.drop = nn.Dropout2d(drop)
+
+    def forward(self, x):
+        y = self.depthwise(x)
+        y = self.pointwise(y)
+        y = self.norm(y)
+        y = self.act(y)
+        y = self.drop(y)
+        return x + y
+
+class ASPP(nn.Module):
+    def __init__(self, C, out_channels=None, groups=8):
+        super().__init__()
+        O = out_channels or C
+        self.b1 = nn.Conv2d(C, O, 1, bias=False)
+        self.b2 = nn.Conv2d(C, O, 3, padding=1, dilation=1, bias=False)
+        self.b3 = nn.Conv2d(C, O, 3, padding=2, dilation=2, bias=False)
+        self.b4 = nn.Conv2d(C, O, 3, padding=3, dilation=3, bias=False)
+        self.proj = nn.Sequential(
+            nn.GroupNorm(groups, O * 4),
+            nn.GELU(),
+            nn.Conv2d(O * 4, O, 1, bias=False),
+        )
+
+    def forward(self, x):
+        feats = torch.cat([self.b1(x), self.b2(x), self.b3(x), self.b4(x)], dim=1)
+        return self.proj(feats)
+
 class ConvTileDecoder(nn.Module):
     """
-    Expects x: [B, gh, gw, 2D] where the last dim is [img_tokens(D) || txt_emb(D) broadcast].
-    - Splits image features and text features
-    - Projects text to D and adds it to image features (conditioning)
-    - Runs a small CNN and outputs per-tile probabilities [B, gh, gw]
+    Expects x: [B, gh, gw, 2D] with img_tokens||txt_emb (txt broadcast spatially).
     """
     def __init__(self, in_dim_2D: int):
         super().__init__()
-        self.D = in_dim_2D // 2  # embedding dim
+        self.D = in_dim_2D // 2
+        C = 256  # set to 128 if you need less VRAM
 
-        self.text_projection = nn.Linear(self.D, self.D)
+        # Image projection and FiLM (channel-wise scale/shift from text)
+        self.img_proj = nn.Conv2d(self.D, C, 1, bias=False)
+        self.film = nn.Linear(self.D, 2 * C)  # -> [gamma, beta]
 
-        self.conv_blocks = nn.Sequential(
-            nn.Conv2d(self.D, 256, 3, padding=1),
-            nn.BatchNorm2d(256),
+        # Strong but compact body
+        self.body = nn.Sequential(
+            ResBlock(C, dilation=1, drop=0.1),
+            ResBlock(C, dilation=2, drop=0.1),
+            ResBlock(C, dilation=3, drop=0.1),
+        )
+        self.aspp = ASPP(C, out_channels=C)
+
+        # Head -> logits -> sigmoid (you use BCELoss with probabilities)
+        self.head = nn.Sequential(
+            nn.Conv2d(C, C // 2, 3, padding=1, bias=False),
+            nn.GroupNorm(8, C // 2),
             nn.GELU(),
             nn.Dropout2d(0.1),
-
-            nn.Conv2d(256, 128, 3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.GELU(),
-            nn.Dropout2d(0.1),
-
-            nn.Conv2d(128, 1, 1),
+            nn.Conv2d(C // 2, 1, 1),
         )
 
     def forward(self, x):  # x: [B, gh, gw, 2D]
-        B, gh, gw, F = x.shape
+        B, gh, gw, _ = x.shape
         D = self.D
-        img_feat = x[..., :D]                 # [B, gh, gw, D]
-        txt_feat = x[..., D:]                 # [B, gh, gw, D] (broadcasted spatially)
 
-        # single text vector per sample (identical across spatial dims)
-        txt_vec = txt_feat[:, 0, 0, :]        # [B, D]
-        txt_proj = self.text_projection(txt_vec)  # [B, D]
+        img = x[..., :D].permute(0, 3, 1, 2).contiguous()   # [B, D, gh, gw]
+        txt_vec = x[:, 0, 0, D:]                            # [B, D] (one per sample)
 
-        # to NCHW and add conditioning
-        img_feat = img_feat.permute(0, 3, 1, 2).contiguous()       # [B, D, gh, gw]
-        txt_map  = txt_proj[:, :, None, None].expand(B, D, gh, gw) # [B, D, gh, gw]
-        feat = img_feat + txt_map
+        feat = self.img_proj(img)                           # [B, C, gh, gw]
 
-        logits = self.conv_blocks(feat)       # [B, 1, gh, gw]
-        probs  = torch.sigmoid(logits)        # BCELoss wants probabilities
-        return probs.squeeze(1)               # [B, gh, gw]
+        # FiLM conditioning
+        gamma, beta = self.film(txt_vec).chunk(2, dim=-1)   # [B, C], [B, C]
+        gamma = gamma[:, :, None, None]
+        beta  = beta[:,  :, None, None]
+        feat = feat * (1 + gamma) + beta
+
+        feat = self.body(feat)
+        feat = self.aspp(feat)
+        logits = self.head(feat)                            # [B, 1, gh, gw]
+        probs = torch.sigmoid(logits)
+        return probs.squeeze(1)                             # [B, gh, gw]
 
 # =========================
 # Utilities (masked)
@@ -134,14 +175,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", type=str, default="preprocessed_dataset")  # base dir with train/ and val/
     ap.add_argument("--epochs", type=int, default=100)
-    ap.add_argument("--bs", type=int, default=512)
+    ap.add_argument("--bs", type=int, default=128)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--save", type=str, default="tile_decoder_cnn_pad.pt")
     ap.add_argument("--thresh", type=float, default=0.5, help="Mask threshold for mIoU.")
     # wandb
     ap.add_argument("--wandb", type=int, default=1, help="Set 1 to enable Weights & Biases logging.")
     ap.add_argument("--wandb_project", type=str, default="simple-decoders-testing")
-    ap.add_argument("--wandb_run", type=str, default="CNN, dropout 0.1, 3 layers 256 begining")
+    ap.add_argument("--wandb_run", type=str, default="Chatgpt super strong decoder")
     args = ap.parse_args()
 
     seed_all(42)
