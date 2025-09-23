@@ -8,12 +8,12 @@ import torch
 from transformers import AutoModel, AutoProcessor
 
 # ─── SETTINGS ──────────────────────────────────────────────────────
-N = 1000              # number of TRAIN images to process
-VAL_N = 100           # number of VALIDATION (from test split) images to process
+N = 10000              # number of TRAIN images to process
+VAL_N = 1000           # number of VALIDATION (from test split) images to process
 PATCHES = 16
 MIN_CROP = 0.8
 NSD_REF = 425
-OUT_DIR = "preprocessed_dataset"  # base dir; will create train/ and val/ inside
+OUT_DIR = "preprocessed_dataset10000"  # base dir; will create train/ and val/ inside
 CKPT = "google/siglip2-base-patch16-naflex"
 
 os.makedirs(os.path.join(OUT_DIR, "train"), exist_ok=True)

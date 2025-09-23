@@ -17,20 +17,20 @@ class NPZGrid(Dataset):
         # Find global max grid size across the split
         max_gh, max_gw, feat_dim = 0, 0, None
         for p in self.paths:
-            d = np.load(p)
-            gh, gw, D = d["img_tokens"].shape
-            max_gh = max(max_gh, gh)
-            max_gw = max(max_gw, gw)
-            feat_dim = D
+            with np.load(p) as d:  # auto-closes file
+                gh, gw, D = d["img_tokens"].shape
+                max_gh = max(max_gh, gh)
+                max_gw = max(max_gw, gw)
+                feat_dim = D
         self.max_gh, self.max_gw, self.D = max_gh, max_gw, feat_dim  # save for padding
 
     def __len__(self): return len(self.paths)
 
     def __getitem__(self, i):
-        d = np.load(self.paths[i])
-        img_tokens = d["img_tokens"].astype(np.float32)   # [gh, gw, D]
-        txt_emb    = d["txt_emb"].astype(np.float32)      # [D]
-        heatmap    = d["heatmap"].astype(np.float32)      # [gh, gw] in {0,1}
+        with np.load(self.paths[i]) as d:
+            img_tokens = d["img_tokens"].astype(np.float32)   # [gh, gw, D]
+            txt_emb    = d["txt_emb"].astype(np.float32)      # [D]
+            heatmap    = d["heatmap"].astype(np.float32)      # [gh, gw] in {0,1}
 
         gh, gw, D = img_tokens.shape
         # build per-tile text (same everywhere)
@@ -52,94 +52,88 @@ class NPZGrid(Dataset):
         return torch.from_numpy(xp), torch.from_numpy(yp), torch.from_numpy(mp)
 
 # =========================
-# Model: Strong CNN decoder (FiLM + Dilations + ASPP)
+# Single-module strong CNN decoder (FiLM + residual + multi-dilation)
 # Drop-in replacement for ConvTileDecoder
 # =========================
-class ResBlock(nn.Module):
-    def __init__(self, C, dilation=1, drop=0.1, groups=8):
-        super().__init__()
-        self.depthwise = nn.Conv2d(C, C, 3, padding=dilation, dilation=dilation, groups=C, bias=False)
-        self.pointwise = nn.Conv2d(C, C, 1, bias=False)
-        self.norm = nn.GroupNorm(groups, C)
-        self.act = nn.GELU()
-        self.drop = nn.Dropout2d(drop)
-
-    def forward(self, x):
-        y = self.depthwise(x)
-        y = self.pointwise(y)
-        y = self.norm(y)
-        y = self.act(y)
-        y = self.drop(y)
-        return x + y
-
-class ASPP(nn.Module):
-    def __init__(self, C, out_channels=None, groups=8):
-        super().__init__()
-        O = out_channels or C
-        self.b1 = nn.Conv2d(C, O, 1, bias=False)
-        self.b2 = nn.Conv2d(C, O, 3, padding=1, dilation=1, bias=False)
-        self.b3 = nn.Conv2d(C, O, 3, padding=2, dilation=2, bias=False)
-        self.b4 = nn.Conv2d(C, O, 3, padding=3, dilation=3, bias=False)
-        self.proj = nn.Sequential(
-            nn.GroupNorm(groups, O * 4),
-            nn.GELU(),
-            nn.Conv2d(O * 4, O, 1, bias=False),
-        )
-
-    def forward(self, x):
-        feats = torch.cat([self.b1(x), self.b2(x), self.b3(x), self.b4(x)], dim=1)
-        return self.proj(feats)
-
 class ConvTileDecoder(nn.Module):
     """
     Expects x: [B, gh, gw, 2D] with img_tokens||txt_emb (txt broadcast spatially).
     """
-    def __init__(self, in_dim_2D: int):
+    def __init__(self, in_dim_2D: int, C: int = 256, groups: int = 8, drop: float = 0.1):
         super().__init__()
-        self.D = in_dim_2D // 2
-        C = 256  # set to 128 if you need less VRAM
+        self.D = in_dim_2D // 2  # feature dim of img/txt
+        self.C = C
 
-        # Image projection and FiLM (channel-wise scale/shift from text)
+        # project image channels, and FiLM (scale/shift) from text
         self.img_proj = nn.Conv2d(self.D, C, 1, bias=False)
-        self.film = nn.Linear(self.D, 2 * C)  # -> [gamma, beta]
+        self.film = nn.Linear(self.D, 2 * C)  # -> gamma, beta
 
-        # Strong but compact body
-        self.body = nn.Sequential(
-            ResBlock(C, dilation=1, drop=0.1),
-            ResBlock(C, dilation=2, drop=0.1),
-            ResBlock(C, dilation=3, drop=0.1),
+        # block 1 (depthwise separable + residual)
+        self.dw1 = nn.Conv2d(C, C, 3, padding=1, groups=C, bias=False)
+        self.pw1 = nn.Conv2d(C, C, 1, bias=False)
+        self.gn1 = nn.GroupNorm(groups, C)
+
+        # block 2 (larger RF via dilation) + residual
+        self.dw2 = nn.Conv2d(C, C, 3, padding=2, dilation=2, groups=C, bias=False)
+        self.pw2 = nn.Conv2d(C, C, 1, bias=False)
+        self.gn2 = nn.GroupNorm(groups, C)
+
+        self.act = nn.GELU()
+        self.drop = nn.Dropout2d(drop)
+
+        # simple multi-dilation mix (mini-ASPP without a separate module)
+        self.m1 = nn.Conv2d(C, C // 2, 1, bias=False)
+        self.m2 = nn.Conv2d(C, C // 2, 3, padding=2, dilation=2, bias=False)
+        self.m3 = nn.Conv2d(C, C // 2, 3, padding=3, dilation=3, bias=False)
+        self.ms_fuse = nn.Sequential(
+            nn.GroupNorm(groups, (C // 2) * 3),
+            nn.GELU(),
+            nn.Conv2d((C // 2) * 3, C, 1, bias=False),
         )
-        self.aspp = ASPP(C, out_channels=C)
 
-        # Head -> logits -> sigmoid (you use BCELoss with probabilities)
+        # head -> logits -> sigmoid
         self.head = nn.Sequential(
             nn.Conv2d(C, C // 2, 3, padding=1, bias=False),
-            nn.GroupNorm(8, C // 2),
+            nn.GroupNorm(groups, C // 2),
             nn.GELU(),
-            nn.Dropout2d(0.1),
+            nn.Dropout2d(drop),
             nn.Conv2d(C // 2, 1, 1),
         )
 
     def forward(self, x):  # x: [B, gh, gw, 2D]
         B, gh, gw, _ = x.shape
-        D = self.D
+        D, C = self.D, self.C
 
         img = x[..., :D].permute(0, 3, 1, 2).contiguous()   # [B, D, gh, gw]
-        txt_vec = x[:, 0, 0, D:]                            # [B, D] (one per sample)
+        txt = x[:, 0, 0, D:]                                 # [B, D]
 
-        feat = self.img_proj(img)                           # [B, C, gh, gw]
+        feat = self.img_proj(img)                            # [B, C, gh, gw]
 
         # FiLM conditioning
-        gamma, beta = self.film(txt_vec).chunk(2, dim=-1)   # [B, C], [B, C]
-        gamma = gamma[:, :, None, None]
-        beta  = beta[:,  :, None, None]
-        feat = feat * (1 + gamma) + beta
+        gamma, beta = self.film(txt).chunk(2, dim=-1)        # [B, C] each
+        feat = feat * (1 + gamma[:, :, None, None]) + beta[:, :, None, None]
 
-        feat = self.body(feat)
-        feat = self.aspp(feat)
-        logits = self.head(feat)                            # [B, 1, gh, gw]
+        # block 1 (residual)
+        y = self.pw1(self.dw1(feat))
+        y = self.act(self.gn1(y))
+        y = self.drop(y)
+        feat = feat + y
+
+        # block 2 (residual, dilated)
+        y = self.pw2(self.dw2(feat))
+        y = self.act(self.gn2(y))
+        y = self.drop(y)
+        feat = feat + y
+
+        # multi-dilation mix and fuse
+        mix = torch.cat([self.m1(feat), self.m2(feat), self.m3(feat)], dim=1)
+        feat = self.ms_fuse(mix)
+
+        logits = self.head(feat)                              # [B, 1, gh, gw]
         probs = torch.sigmoid(logits)
-        return probs.squeeze(1)                             # [B, gh, gw]
+        return probs.squeeze(1)                               # [B, gh, gw]
+
+
 
 # =========================
 # Utilities (masked)
@@ -173,16 +167,16 @@ def maybe_init_wandb(args, config):
 # =========================
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", type=str, default="preprocessed_dataset")  # base dir with train/ and val/
-    ap.add_argument("--epochs", type=int, default=100)
+    ap.add_argument("--root", type=str, default="preprocessed_dataset5000")  # base dir with train/ and val/
+    ap.add_argument("--epochs", type=int, default=10)
     ap.add_argument("--bs", type=int, default=128)
     ap.add_argument("--lr", type=float, default=1e-3)
-    ap.add_argument("--save", type=str, default="tile_decoder_cnn_pad.pt")
+    ap.add_argument("--save", type=str, default="op_weights.pt")
     ap.add_argument("--thresh", type=float, default=0.5, help="Mask threshold for mIoU.")
     # wandb
     ap.add_argument("--wandb", type=int, default=1, help="Set 1 to enable Weights & Biases logging.")
     ap.add_argument("--wandb_project", type=str, default="simple-decoders-testing")
-    ap.add_argument("--wandb_run", type=str, default="Chatgpt super strong decoder")
+    ap.add_argument("--wandb_run", type=str, default="OP chatgpt 5000 dataset")
     args = ap.parse_args()
 
     seed_all(42)
