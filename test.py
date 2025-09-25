@@ -183,7 +183,7 @@ def sanitize(s: str):
 # --- main ---
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", default="person.jpg", help="Path to input JPG/PNG/WEBP")
+    ap.add_argument("--image", default="park.jpg", help="Path to input JPG/PNG/WEBP")
     ap.add_argument("--text", default="person", help="Text/category")
     ap.add_argument("--weights", default="op_weights.pt", help="Trained decoder .pt")
     ap.add_argument("--max_patches", type=int, default=4096, help="Cap on token patches (gh*gw).")
