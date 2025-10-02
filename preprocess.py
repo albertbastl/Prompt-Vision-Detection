@@ -1,87 +1,79 @@
 from datasets import load_dataset
-from PIL import Image, ImageOps
-import os, itertools, math, random, json
+from PIL import Image
+import os, itertools, math, random, json, re, glob
 import numpy as np
-
-# NEW: embeddings
 import torch
 from transformers import AutoModel, AutoProcessor
 
-# ─── SETTINGS ──────────────────────────────────────────────────────
-N = 10000              # number of TRAIN images to process
-VAL_N = 1000           # number of VALIDATION (from test split) images to process
-PATCHES = 16
-MIN_CROP = 0.8
-NSD_REF = 425
-OUT_DIR = "preprocessed_dataset10000"  # base dir; will create train/ and val/ inside
-CKPT = "google/siglip2-base-patch16-naflex"
+# ── SETTINGS ───────────────────────────────────────────────────────
+PATCHES      = 16
+MIN_CROP     = 0.8
+NSD_REF      = 425
+OUT_DIR      = "preprocessed_dataset_full"     # will create train/ and val/
+CKPT         = "google/siglip2-base-patch16-naflex"
+
+VAL_N        = 1000                            # exactly 1000 for validation
+TRAIN_MAX    = None                            # None → whole split
+START_FROM   = None                            # e.g. 12345 to resume from this image index
+AUTO_RESUME  = True                            # if True and START_FROM is None, infer from files
 
 os.makedirs(os.path.join(OUT_DIR, "train"), exist_ok=True)
 os.makedirs(os.path.join(OUT_DIR, "val"), exist_ok=True)
 
-# ─── LOAD PMI (least-similar negatives) ────────────────────────────
 with open("./words/pmi.json", "r") as f:
     PMI = json.load(f)
 
-# ─── HELPERS ──────────────────────────────────────────────────────
+# ── HELPERS ────────────────────────────────────────────────────────
+def _infer_start_idx(path):
+    files = glob.glob(os.path.join(path, "*.npz"))
+    if not files: return 0
+    # filenames start with zero-padded index: "00012_cat.npz" or "00012_dog__neg.npz"
+    pat = re.compile(r"^(\d+)_")
+    idxs = []
+    for f in files:
+        m = pat.search(os.path.basename(f))
+        if m: idxs.append(int(m.group(1)))
+    return (max(idxs) + 1) if idxs else 0
+
 def stretch_to_multiple(img):
-    """Resize image so that width and height are multiples of PATCHES."""
     W, H = img.size
     newW = ((W + PATCHES - 1) // PATCHES) * PATCHES
     newH = ((H + PATCHES - 1) // PATCHES) * PATCHES
-    if (newW, newH) == (W, H):
-        return img
-    return img.resize((newW, newH), Image.Resampling.BILINEAR)
+    return img if (newW, newH)==(W,H) else img.resize((newW, newH), Image.Resampling.BILINEAR)
 
 def snap_bbox_to_tiles(bbox, tile, W, H, img_w, img_h, crop_x0=0, crop_y0=0):
-    """COCO bbox [x,y,w,h] → (x0,y0,x1,y1) snapped to tile grid and clipped."""
     x, y, w, h = map(float, bbox)
-    sx = img_w / NSD_REF
-    sy = img_h / NSD_REF
-    x = x * sx - crop_x0
-    y = y * sy - crop_y0
-    w = w * sx
-    h = h * sy
-    x0 = int(math.floor(x / tile) * tile)
-    y0 = int(math.floor(y / tile) * tile)
-    x1 = int(math.ceil((x + w) / tile) * tile)
-    y1 = int(math.ceil((y + h) / tile) * tile)
+    sx = img_w / NSD_REF; sy = img_h / NSD_REF
+    x = x * sx - crop_x0; y = y * sy - crop_y0
+    w = w * sx; h = h * sy
+    x0 = int(math.floor(x / tile) * tile); y0 = int(math.floor(y / tile) * tile)
+    x1 = int(math.ceil((x + w) / tile) * tile); y1 = int(math.ceil((y + h) / tile) * tile)
     x0 = max(0, min(x0, W)); y0 = max(0, min(y0, H))
     x1 = max(0, min(x1, W)); y1 = max(0, min(y1, H))
     return x0, y0, x1, y1
 
 def make_tile_binary_heatmap(W, H, tile, bboxes, original_w, original_h, crop_x0=0, crop_y0=0):
-    """
-    Returns:
-      mask : (H, W) uint8 binary mask {0,255}, with tiles containing a bbox marked.
-      grid : (H//tile, W//tile) uint8 binary array {0,1}.
-    """
     gh, gw = H // tile, W // tile
     grid = np.zeros((gh, gw), dtype=np.uint8)
     for bbox in bboxes:
         x0, y0, x1, y1 = snap_bbox_to_tiles(bbox, tile, W, H, original_w, original_h, crop_x0, crop_y0)
-        if x1 <= x0 or y1 <= y0:
-            continue
+        if x1 <= x0 or y1 <= y0: continue
         tx0, ty0 = x0 // tile, y0 // tile
         tx1, ty1 = (x1 - 1) // tile, (y1 - 1) // tile
         grid[ty0:ty1+1, tx0:tx1+1] = 1
     mask = (np.kron(grid, np.ones((tile, tile), dtype=np.uint8)) * 255).astype(np.uint8)
-    mask = mask[:H, :W]
-    return mask, grid
+    return mask[:H, :W], grid
 
 def crop_image(img):
-    """Random crop with size aligned to PATCHES and *origin snapped to PATCHES*. Returns cropped image AND (x0,y0)."""
     W, H = img.size
-    scale_w = random.uniform(MIN_CROP, 1.0)
-    scale_h = random.uniform(MIN_CROP, 1.0)
-    newW = int(W * scale_w); newH = int(H * scale_h)
-    newW = (newW // PATCHES) * PATCHES; newH = (newH // PATCHES) * PATCHES
-    newW = max(PATCHES, min(newW, W)); newH = max(PATCHES, min(newH, H))
+    sw = random.uniform(MIN_CROP, 1.0); sh = random.uniform(MIN_CROP, 1.0)
+    newW = max(PATCHES, min((int(W * sw) // PATCHES) * PATCHES, W))
+    newH = max(PATCHES, min((int(H * sh) // PATCHES) * PATCHES, H))
     x0 = (random.randint(0, W - newW) // PATCHES) * PATCHES
     y0 = (random.randint(0, H - newH) // PATCHES) * PATCHES
     return img.crop((x0, y0, x0 + newW, y0 + newH)), x0, y0
 
-# ─── SIGLIP2 ENCODERS ──────────────────────────────────────────────
+# ── ENCODERS ───────────────────────────────────────────────────────
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype  = torch.float16 if device == "cuda" else torch.float32
 siglip = AutoModel.from_pretrained(CKPT, torch_dtype=dtype).to(device).eval()
@@ -89,102 +81,97 @@ processor = AutoProcessor.from_pretrained(CKPT)
 
 @torch.no_grad()
 def encode_image(pil_img):
-    gh, gw = pil_img.height // PATCHES, pil_img.width // PATCHES  # grid size
-    batch = processor(
-        images=pil_img,
-        return_tensors="pt",
-        do_resize=False,
-        max_num_patches=4096,
-    )
+    gh, gw = pil_img.height // PATCHES, pil_img.width // PATCHES
+    batch = processor(images=pil_img, return_tensors="pt", do_resize=False, max_num_patches=4096)
     batch = {k: v.to(device) for k, v in batch.items()}
-
     out = siglip.vision_model(
         pixel_values=batch["pixel_values"],
         attention_mask=batch["pixel_attention_mask"],
         spatial_shapes=batch["spatial_shapes"],
     )
-
-    feats = out.last_hidden_state[0].float()        # [T, D]
-    mask  = batch["pixel_attention_mask"][0].bool() # [T]
-    feats = feats[mask]                              # [T_real, D]
-
-    # expect one token per 16×16 patch
+    feats = out.last_hidden_state[0].float()
+    mask  = batch["pixel_attention_mask"][0].bool()
+    feats = feats[mask]
     T, D = feats.shape
     assert T == gh * gw, f"Token count {T} != {gh}*{gw} ({gh*gw})"
-
-    # reshape to a spatial grid so a CNN can read it directly
-    feats = feats.view(gh, gw, D)
-
-    return feats.cpu().half().numpy()  # [gh, gw, D], float16
+    return feats.view(gh, gw, D).cpu().half().numpy()
 
 @torch.no_grad()
 def encode_text(text: str):
     toks = processor(text=[text], return_tensors="pt", padding=True, truncation=True)
     toks = {k: v.to(device) for k, v in toks.items() if k in ("input_ids", "attention_mask")}
-    emb = siglip.text_model(**toks).pooler_output           # [1, D]
+    emb = siglip.text_model(**toks).pooler_output
     emb = torch.nn.functional.normalize(emb, p=2, dim=-1)
-    return emb.squeeze(0).cpu().half().numpy()              # [D]
+    return emb.squeeze(0).cpu().half().numpy()
 
-# ─── CORE PROCESSOR ────────────────────────────────────────────────
-def process_split(split_name: str, max_items: int, subdir: str):
+# ── CORE ───────────────────────────────────────────────────────────
+def process_split(split_name: str, max_items, subdir: str, start_from=None, auto_resume=True):
     out_dir = os.path.join(OUT_DIR, subdir)
+    os.makedirs(out_dir, exist_ok=True)
+
+    # figure starting index
+    if start_from is None and auto_resume:
+        start_from = _infer_start_idx(out_dir)
+    if start_from is None:
+        start_from = 0
+
     ds = load_dataset("clane9/NSD-Flat", split=split_name, streaming=True)
 
-    for i, sample in enumerate(itertools.islice(ds, max_items)):
-        img = stretch_to_multiple(sample["image"])
-        original_w, original_h = img.size  # stretched dims
+    # streaming skip
+    it = itertools.islice(ds, start_from, None if max_items is None else start_from + max_items)
 
-        labels  = sample.get("objects", {})
-        objects = labels.get("category", [])
-        bboxes  = labels.get("bbox", [])
-        unique_objects = set(objects)
+    try:
+        for j, sample in enumerate(it, start=start_from):
+            img = stretch_to_multiple(sample["image"])
+            original_w, original_h = img.size
 
-        for cat in unique_objects:
-            # crop once per (image, category)
-            cropped_img, cx0, cy0 = crop_image(img)
-            W, H = cropped_img.size
+            labels  = sample.get("objects", {})
+            objects = labels.get("category", [])
+            bboxes  = labels.get("bbox", [])
+            unique_objects = set(objects)
 
-            # all boxes of this category (in original coords)
-            cat_bboxes = [bb for obj, bb in zip(objects, bboxes) if obj == cat]
+            for cat in unique_objects:
+                cropped_img, cx0, cy0 = crop_image(img)
+                W, H = cropped_img.size
+                cat_bboxes = [bb for obj, bb in zip(objects, bboxes) if obj == cat]
+                _, grid01 = make_tile_binary_heatmap(W, H, PATCHES, cat_bboxes, original_w, original_h, cx0, cy0)
+                heat01 = grid01.astype(np.uint8)
 
-            # heatmap for this category in this crop
-            _, grid01 = make_tile_binary_heatmap(W, H, PATCHES, cat_bboxes, original_w, original_h, cx0, cy0)
-            heat01 = grid01.astype(np.uint8)  # <- shape (H//16, W//16)
-        
-            pos_txt_emb = encode_text(cat)                      # [D]
-            img_tokens = encode_image(cropped_img)              # [gh, gw, D] float16
+                pos_txt_emb = encode_text(cat)
+                img_tokens  = encode_image(cropped_img)
+                gh, gw, _ = img_tokens.shape
+                assert heat01.shape == (gh, gw)
 
-            gh, gw, D = img_tokens.shape
-            assert heat01.shape == (gh, gw), f"heatmap {heat01.shape} != tokens {(gh, gw)}"
+                base = f"{j:06d}_{cat.replace(' ', '_')}"
+                np.savez_compressed(
+                    os.path.join(out_dir, f"{base}.npz"),
+                    heatmap=heat01,
+                    img_tokens=float16_safe(img_tokens:=img_tokens),
+                    txt_emb=pos_txt_emb,
+                )
 
-            # ----- save POSITIVE -----
-            out_base = f"{i:05d}_{cat.replace(' ', '_')}"
-            np.savez_compressed(
-                os.path.join(out_dir, f"{out_base}.npz"),
-                heatmap=heat01.astype(np.uint8),  # HxW {0,1}
-                img_tokens=img_tokens,            # [gh, gw, D] float16
-                txt_emb=pos_txt_emb,              # [D] float16
-            )
+                d = PMI.get(cat, {})
+                neg_word = (min(d, key=d.get) if d else "none")
+                neg_txt_emb = encode_text(neg_word)
+                np.savez_compressed(
+                    os.path.join(out_dir, f"{j:06d}_{neg_word.replace(' ', '_')}__neg.npz"),
+                    heatmap=np.zeros_like(heat01, dtype=np.uint8),
+                    img_tokens=img_tokens,
+                    txt_emb=neg_txt_emb,
+                )
 
-            # ----- save NEGATIVE -----
-            d = PMI.get(cat, {})
-            neg_word = (min(d, key=d.get) if d else "none")
-            neg_txt_emb = encode_text(neg_word)
-            np.savez_compressed(
-                os.path.join(out_dir, f"{i:05d}_{neg_word.replace(' ', '_')}__neg.npz"),
-                heatmap=np.zeros_like(heat01, dtype=np.uint8),  # HxW zeros
-                img_tokens=img_tokens,                           # same tokens
-                txt_emb=neg_txt_emb,                             # negative text emb
-            )
+            print(f"[{subdir}] saved image #{j}")
+    except KeyboardInterrupt:
+        print(f"\n[{subdir}] interrupted at image #{j}. You can resume from {j}.")
 
-        print(f"[{subdir}] Saved {i} image pair(s).")
+# small helper to keep dtype consistent in npz
+def float16_safe(x):
+    return x.astype(np.float16, copy=False)
 
-# ─── MAIN ──────────────────────────────────────────────────────────
+# ── MAIN ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # TRAIN (from 'train' split)
-    if N and N > 0:
-        process_split("train", N, "train")
+    # TRAIN: full dataset
+    process_split("train", TRAIN_MAX, "train", start_from=START_FROM, auto_resume=AUTO_RESUME)
 
-    # VALIDATION (from 'test' split)
-    if VAL_N and VAL_N > 0:
-        process_split("test", VAL_N, "val")
+    # VAL: exactly 1000
+    process_split("test", VAL_N, "val", start_from=START_FROM, auto_resume=AUTO_RESUME)

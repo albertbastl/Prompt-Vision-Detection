@@ -2,5 +2,6 @@
 /preprocessed_dataset2000
 /preprocessed_dataset5000
 /preprocessed_dataset10000
+/preprocessed_dataset_full
 /__pycache__
 /wandb
