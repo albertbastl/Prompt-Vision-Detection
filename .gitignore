@@ -1,0 +1,15 @@
+# Ignore PyTorch model files
+*.pt
+
+# Ignore common image formats
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.svg
+*.tif
+*.tiff
+
+pd_410patches_openvocab
+wandb
