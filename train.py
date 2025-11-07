@@ -126,7 +126,8 @@ def main():
     ap.add_argument("--load_weights", type=str, default=None)
     ap.add_argument("--wandb", type=int, default=1)
     ap.add_argument("--wandb_project", type=str, default="openvocab")
-    ap.add_argument("--wandb_run", type=str, default="first test")
+    ap.add_argument("--wandb_run", type=str, default="30k images, 64bs, 1e-3lr")
+    ap.add_argument("--log_every_images", type=int, default=1000, help="Log metrics to wandb every N images")
     args = ap.parse_args()
 
     seed_all(42)
@@ -152,25 +153,70 @@ def main():
     bce = nn.BCELoss(reduction="none")
     wb = maybe_init_wandb(args, config={**vars(args), "in_dim_2D": in_dim_2D, "max_grid": (train_ds.max_gh, train_ds.max_gw)})
 
+    # --- WANDB STEP LOGGING: Initializations ---
+    global_step = 0
+    images_since_last_log = 0
+    log_loss = 0.0
+    log_iou = 0.0
+    log_n = 0
+    # --- End Initializations ---
+
     for epoch in range(1, args.epochs + 1):
         print(f"\n=== Epoch {epoch:02d}/{args.epochs} ===")
         epoch_t0 = time.time()
         model.train()
-        total_loss, total_iou, n_train = 0.0, 0.0, 0
+        total_loss, total_iou, n_train = 0.0, 0.0, 0 # Epoch totals
         train_iter = tqdm(train_loader, desc=f"train {epoch:02d}")
+        
         for x, y, m in train_iter:
             x, y, m = x.to(device), y.to(device), m.to(device)
+            batch_size = x.size(0)
+            
             opt.zero_grad(set_to_none=True)
             probs = model(x)
             loss_map = bce(probs, y)
             valid = m.float()
             loss = (loss_map * valid).sum() / (valid.sum().clamp_min(1.0))
+            
             loss.backward(); opt.step()
+            
+            global_step += batch_size
+            images_since_last_log += batch_size
+
             with torch.no_grad():
-                total_loss += loss.item()
-                total_iou += iou_from_logits_masked(probs, y, m, thresh=args.thresh)
+                current_loss = loss.item()
+                current_iou = iou_from_logits_masked(probs, y, m, thresh=args.thresh)
+                
+                # Accumulate for epoch averages
+                total_loss += current_loss
+                total_iou += current_iou
                 n_train += 1
-                if n_train > 0: train_iter.set_postfix(loss=total_loss/n_train, miou=total_iou/n_train)
+                
+                # Accumulate for step logging
+                log_loss += current_loss
+                log_iou += current_iou
+                log_n += 1
+
+                if n_train > 0: 
+                    train_iter.set_postfix(loss=total_loss/n_train, miou=total_iou/n_train)
+
+                # --- WANDB STEP LOGGING: Check and Log ---
+                if wb and images_since_last_log >= args.log_every_images:
+                    import wandb  # <-- FIX: Import wandb module here
+                    avg_step_loss = log_loss / log_n
+                    avg_step_iou = log_iou / log_n
+                    wandb.log({
+                        "train/step_loss": avg_step_loss,
+                        "train/step_mIoU": avg_step_iou,
+                        "global_step": global_step
+                    })
+                    # Reset step accumulators
+                    images_since_last_log = 0
+                    log_loss = 0.0
+                    log_iou = 0.0
+                    log_n = 0
+                # --- End Step Logging ---
+
         train_loss, train_miou = total_loss / max(n_train, 1), total_iou / max(n_train, 1)
 
         model.eval()
@@ -194,8 +240,16 @@ def main():
 
         if wb:
             import wandb
-            wandb.log({"epoch": epoch, "train/loss": train_loss, "train/mIoU": train_miou,
-                       "val/loss": val_loss, "val/mIoU": val_miou, "time/epoch_sec": epoch_dt})
+            # Log epoch averages
+            wandb.log({
+                "epoch": epoch,
+                "train/epoch_loss": train_loss, # Renamed from train/loss
+                "train/epoch_mIoU": train_miou, # Renamed from train/mIoU
+                "val/loss": val_loss,
+                "val/mIoU": val_miou,
+                "time/epoch_sec": epoch_dt,
+                "global_step": global_step # Also log global_step at epoch end
+            })
         
         ckpt_data = {"model": model.state_dict(), "in_dim_2D": in_dim_2D,
                      "thresh": args.thresh, "max_grid": (train_ds.max_gh, train_ds.max_gw)}

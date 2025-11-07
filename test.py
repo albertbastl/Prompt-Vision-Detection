@@ -150,8 +150,8 @@ def sanitize(s: str):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--image", default="park.jpg")
-    ap.add_argument("--text", default="person")
-    ap.add_argument("--weights", default="weights_epoch02.pt")
+    ap.add_argument("--text", default="shirt")
+    ap.add_argument("--weights", default="weights_total.pt")
     ap.add_argument("--max_patches", type=int, default=410)
     ap.add_argument("--alpha", type=int, default=150)
     args = ap.parse_args()

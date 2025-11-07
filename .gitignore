@@ -13,3 +13,5 @@
 
 pd_410patches_openvocab
 wandb
+
+.gitignore

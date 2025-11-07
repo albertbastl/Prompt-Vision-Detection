@@ -7,10 +7,10 @@ from transformers import AutoModel, AutoProcessor
 
 PATCHES      = 16
 MAX_PATCHES  = 410
-OUT_DIR      = "pd_410patches_oopenvocab"
+OUT_DIR      = "pd_410patches_openvocab"
 CKPT         = "google/siglip2-base-patch16-naflex"
-VAL_N        = 1000
-TRAIN_MAX    = 10000
+VAL_N        = 3000
+TRAIN_MAX    = 30000
 
 def to_multiple(v, m=PATCHES):
     return int(round(v / m) * m)
