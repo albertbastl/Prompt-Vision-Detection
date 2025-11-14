@@ -14,5 +14,6 @@
 pd_410patches_openvocab
 wandb
 imgs
+pd_410patches_fixed
 
 .gitignore

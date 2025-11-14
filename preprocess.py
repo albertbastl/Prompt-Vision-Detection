@@ -7,10 +7,10 @@ from transformers import AutoModel, AutoProcessor
 
 PATCHES      = 16
 MAX_PATCHES  = 410
-OUT_DIR      = "pd_410patches_openvocab"
+OUT_DIR      = "pd_410patches_fixed"
 CKPT         = "google/siglip2-base-patch16-naflex"
-VAL_N        = 3000
-TRAIN_MAX    = 30000
+VAL_N        = 1000
+TRAIN_MAX    = 10000
 
 def to_multiple(v, m=PATCHES):
     return int(round(v / m) * m)
@@ -37,6 +37,7 @@ def snap_bbox_to_tiles(bbox, tile, W, H):
     x1 = max(0, min(x1, W)); y1 = max(0, min(y1, H))
     return x0, y0, x1, y1
 
+# --- THIS FUNCTION IS NOW FIXED ---
 def make_tile_binary_heatmap(W, H, tile, bboxes):
     gh, gw = H // tile, W // tile
     grid = np.zeros((gh, gw), dtype=np.uint8)
@@ -44,9 +45,17 @@ def make_tile_binary_heatmap(W, H, tile, bboxes):
         x0, y0, x1, y1 = snap_bbox_to_tiles(bbox, tile, W, H)
         if x1 <= x0 or y1 <= y0: continue
         tx0, ty0 = x0 // tile, y0 // tile
-        tx1 = (x1 - 1) // tile
-        grid[ty0:ty0+1, tx0:tx1+1] = 1 
+        
+        # --- FIX ---
+        tx1 = (x1 - 1) // tile # Calculate end x-tile
+        ty1 = (y1 - 1) // tile # CALCULATE END Y-TILE (This was missing)
+        
+        # Use ty1 in the slice to fill the full box
+        grid[ty0:ty1+1, tx0:tx1+1] = 1 
+        # --- END FIX ---
+        
     return grid
+# --- END OF FIX ---
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype  = torch.float16 if device == "cuda" else torch.float32
@@ -104,6 +113,7 @@ def process_split(split_name: str, max_items, subdir: str):
         all_masks, all_txt_embs = [], []
         for cat in unique_objects:
             cat_bboxes = [bb for obj, bb in zip(objects, bboxes) if obj == cat]
+            # This now calls the fixed function
             all_masks.append(make_tile_binary_heatmap(W, H, PATCHES, cat_bboxes))
             all_txt_embs.append(encode_text(cat))
 

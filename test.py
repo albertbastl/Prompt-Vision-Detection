@@ -142,9 +142,9 @@ def sanitize(s: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", default="./imgs/bake.jpg")
-    ap.add_argument("--text", default="baked goods")
-    ap.add_argument("--weights", default="weights_sigloss_epoch08.pt") # Make sure this points to your new weights
+    ap.add_argument("--image", default="./imgs/car.jpg")
+    ap.add_argument("--text", default="car")
+    ap.add_argument("--weights", default="weights_fixed_epoch08.pt")
     ap.add_argument("--max_patches", type=int, default=410)
     ap.add_argument("--alpha", type=int, default=150)
     args = ap.parse_args()

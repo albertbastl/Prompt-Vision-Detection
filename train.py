@@ -126,11 +126,11 @@ def maybe_init_wandb(args, config):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", type=str, default="pd_410patches_openvocab")
+    ap.add_argument("--root", type=str, default="pd_410patches_fixed")
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--bs", type=int, default=64)
     ap.add_argument("--lr", type=float, default=3e-4) # CHANGED: Reduced from 1e-3
-    ap.add_argument("--save", type=str, default="weights_sigloss.pt")
+    ap.add_argument("--save", type=str, default="weights_fixed.pt")
     ap.add_argument("--thresh", type=float, default=0.5)
     ap.add_argument("--load_weights", type=str, default=None)
     ap.add_argument("--wandb", type=int, default=1)
