@@ -3,47 +3,40 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import torch
 from torch import nn
+from torch.nn import functional as F # <-- Import F
 from transformers import AutoModel, AutoProcessor
 
 PATCHES = 16
 CKPT    = "google/siglip2-base-patch16-naflex"
 
-class ConvTileDecoder(nn.Module):
-    def __init__(self, in_dim_2D: int, C: int = 256, groups: int = 8, drop: float = 0.1):
+# --- UPDATED MODEL (matches train_fixed.py) ---
+class SimpleProjector(nn.Module):
+    """
+    A simple MLP-based projector.
+    It takes concatenated (img_patch_feat, txt_feat) and predicts a similarity logit.
+    ADDED LayerNorm for training stability.
+    """
+    def __init__(self, in_dim: int, hidden_dim: int = 512, drop: float = 0.1):
         super().__init__()
-        self.D = in_dim_2D // 2; self.C = C
-        self.img_proj = nn.Conv2d(self.D, C, 1, bias=False)
-        self.film = nn.Linear(self.D, 2 * C)
-        self.dw1 = nn.Conv2d(C, C, 3, padding=1, groups=C, bias=False)
-        self.pw1 = nn.Conv2d(C, C, 1, bias=False)
-        self.gn1 = nn.GroupNorm(groups, C)
-        self.dw2 = nn.Conv2d(C, C, 3, padding=2, dilation=2, groups=C, bias=False)
-        self.pw2 = nn.Conv2d(C, C, 1, bias=False)
-        self.gn2 = nn.GroupNorm(groups, C)
-        self.act = nn.GELU(); self.drop = nn.Dropout2d(drop)
-        self.m1 = nn.Conv2d(C, C // 2, 1, bias=False)
-        self.m2 = nn.Conv2d(C, C // 2, 3, padding=2, dilation=2, bias=False)
-        self.m3 = nn.Conv2d(C, C // 2, 3, padding=3, dilation=3, bias=False)
-        self.ms_fuse = nn.Sequential(
-            nn.GroupNorm(groups, (C // 2) * 3), nn.GELU(), nn.Conv2d((C // 2) * 3, C, 1, bias=False)
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim), # ADDED for stability
+            nn.GELU(),
+            nn.Dropout(drop),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.LayerNorm(hidden_dim // 2), # ADDED for stability
+            nn.GELU(),
+            nn.Dropout(drop),
+            nn.Linear(hidden_dim // 2, 1) # Output a single logit
         )
-        self.head = nn.Sequential(
-            nn.Conv2d(C, C // 2, 3, padding=1, bias=False),
-            nn.GroupNorm(groups, C // 2), nn.GELU(),
-            nn.Dropout2d(drop), nn.Conv2d(C // 2, 1, 1),
-        )
+
     def forward(self, x):
-        D, C = self.D, self.C
-        img = x[..., :D].permute(0,3,1,2).contiguous()
-        txt = x[:,0,0,D:]
-        feat = self.img_proj(img)
-        gamma, beta = self.film(txt).chunk(2, dim=-1)
-        feat = feat * (1 + gamma[:,:,None,None]) + beta[:,:,None,None]
-        y = self.act(self.gn1(self.pw1(self.dw1(feat)))); feat = feat + self.drop(y)
-        y = self.act(self.gn2(self.pw2(self.dw2(feat)))); feat = feat + self.drop(y)
-        mix = torch.cat([self.m1(feat), self.m2(feat), self.m3(feat)], dim=1)
-        feat = self.ms_fuse(mix)
-        return torch.sigmoid(self.head(feat)).squeeze(1)
+        """
+        Input x has shape (B, H, W, in_dim)
+        Output will have shape (B, H, W)
+        """
+        return self.net(x).squeeze(-1)
+# --- END UPDATED MODEL ---
 
 def to_multiple(v, m=PATCHES):
     return int(round(v / m) * m)
@@ -149,9 +142,9 @@ def sanitize(s: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", default="park.jpg")
-    ap.add_argument("--text", default="shirt")
-    ap.add_argument("--weights", default="weights_total.pt")
+    ap.add_argument("--image", default="./imgs/bake.jpg")
+    ap.add_argument("--text", default="baked goods")
+    ap.add_argument("--weights", default="weights_sigloss_epoch08.pt") # Make sure this points to your new weights
     ap.add_argument("--max_patches", type=int, default=410)
     ap.add_argument("--alpha", type=int, default=150)
     args = ap.parse_args()
@@ -166,12 +159,30 @@ def main():
     gh, gw, D = img_tokens.shape
     x = np.concatenate([img_tokens, np.broadcast_to(txt_emb, (gh, gw, D))], axis=-1).astype(np.float32)
 
+    # --- UPDATED MODEL LOADING ---
     ckpt = torch.load(args.weights, map_location="cpu")
-    model = ConvTileDecoder(ckpt["in_dim_2D"]).to(device)
-    model.load_state_dict(ckpt["model"]); model.eval()
+    in_dim = ckpt["in_dim_2D"]
+    # Use .get() for backwards compatibility, defaulting to 512
+    hidden_dim = ckpt.get("hidden_dim", 512) 
+    
+    # This now correctly instantiates the model with LayerNorm
+    model = SimpleProjector(in_dim, hidden_dim).to(device)
+    model.load_state_dict(ckpt["model"])
+    model.eval()
+    print(f"Loaded SimpleProjector model with in_dim={in_dim}, hidden_dim={hidden_dim}")
+    # --- END UPDATED MODEL LOADING ---
 
+    # --- UPDATED INFERENCE ---
     with torch.no_grad():
-        probs = model(torch.from_numpy(x).unsqueeze(0).to(device))[0].cpu().numpy()
+        # Input has shape (gh, gw, D_in), add batch dim -> (1, gh, gw, D_in)
+        x_tensor = torch.from_numpy(x).unsqueeze(0).to(device)
+        # Model outputs logits of shape (1, gh, gw)
+        logits = model(x_tensor)
+        # Convert logits to probabilities (0.0 to 1.0) for visualization
+        probs_tensor = torch.sigmoid(logits)
+        # Remove batch dim and move to cpu/numpy -> (gh, gw)
+        probs = probs_tensor[0].cpu().numpy()
+    # --- END UPDATED INFERENCE ---
 
     blocky = grid_to_blocky_rgba(probs, (img_orig.width, img_orig.height), alpha=args.alpha)
     legend = make_vertical_legend(height=img_orig.height)

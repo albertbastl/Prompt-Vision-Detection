@@ -13,5 +13,6 @@
 
 pd_410patches_openvocab
 wandb
+imgs
 
 .gitignore
