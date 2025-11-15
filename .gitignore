@@ -1,5 +1,6 @@
 # Ignore PyTorch model files
 *.pt
+*.pth
 
 # Ignore common image formats
 *.jpg
@@ -11,9 +12,10 @@
 *.tif
 *.tiff
 
-pd_410patches_openvocab
 wandb
 imgs
-pd_410patches_fixed
+pd_10k_500patches
 
 .gitignore
+
+train_old.py

@@ -3,11 +3,19 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import torch
 from torch import nn
-from torch.nn import functional as F # <-- Import F
+from torch.nn import functional as F 
 from transformers import AutoModel, AutoProcessor
 
 PATCHES = 16
 CKPT    = "google/siglip2-base-patch16-naflex"
+
+# --- CHANGED 1: ADD CONSTANTS FROM YOUR TRAINING SCRIPT ---
+# These MUST match the constants you used to train the model.
+EMBED_DIM  = 768
+HIDDEN_DIM = 512
+DROP_RATE  = 0.1
+# --- END CHANGED 1 ---
+
 
 # --- UPDATED MODEL (matches train_fixed.py) ---
 class SimpleProjector(nn.Module):
@@ -142,9 +150,12 @@ def sanitize(s: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", default="./imgs/car.jpg")
-    ap.add_argument("--text", default="car")
-    ap.add_argument("--weights", default="weights_fixed_epoch08.pt")
+    ap.add_argument("--image", default="./imgs/bike.jpg")
+    ap.add_argument("--text", default="bicycle wheel")
+    # --- CHANGED 2: UPDATE THE DEFAULT WEIGHTS FILE NAME (if needed) ---
+    ap.add_argument("--weights", default="simple_projector.pth") # Was "strict500_epoch09.pt"
+    # --- END CHANGED 2 ---
+    
     ap.add_argument("--max_patches", type=int, default=410)
     ap.add_argument("--alpha", type=int, default=150)
     args = ap.parse_args()
@@ -157,17 +168,24 @@ def main():
     txt_emb    = encode_text_emb(args.text, siglip, processor, device)
 
     gh, gw, D = img_tokens.shape
-    x = np.concatenate([img_tokens, np.broadcast_to(txt_emb, (gh, gw, D))], axis=-1).astype(np.float32)
+    
+    # --- CHANGED 3: USE ADDITION, NOT CONCATENATION ---
+    # This now matches your train.py logic
+    # Numpy broadcasting handles (gh, gw, D) + (D)
+    x = (img_tokens + txt_emb).astype(np.float32) 
+    # --- END CHANGED 3 ---
+
 
     # --- UPDATED MODEL LOADING ---
-    ckpt = torch.load(args.weights, map_location="cpu")
-    in_dim = ckpt["in_dim_2D"]
-    # Use .get() for backwards compatibility, defaulting to 512
-    hidden_dim = ckpt.get("hidden_dim", 512) 
+    # We no longer read from the checkpoint, we use the hard-coded constants
+    in_dim = EMBED_DIM     # This is 768
+    hidden_dim = HIDDEN_DIM # This is 512
     
-    # This now correctly instantiates the model with LayerNorm
-    model = SimpleProjector(in_dim, hidden_dim).to(device)
-    model.load_state_dict(ckpt["model"])
+    # This now correctly instantiates the model
+    model = SimpleProjector(in_dim, hidden_dim, drop=DROP_RATE).to(device)
+    
+    # Load the state_dict *directly* from the .pth file
+    model.load_state_dict(torch.load(args.weights, map_location="cpu"))
     model.eval()
     print(f"Loaded SimpleProjector model with in_dim={in_dim}, hidden_dim={hidden_dim}")
     # --- END UPDATED MODEL LOADING ---
