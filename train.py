@@ -7,9 +7,9 @@ from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
 from tqdm.auto import tqdm
 
-
 TRAIN_DIR = "pd_10k_500patches/train"
 VAL_DIR = "pd_10k_500patches/val" 
+SAVE_PATH = "miou.pt"
 
 BATCH_SIZE = 64
 NUM_WORKERS = 4
@@ -20,6 +20,20 @@ DROP_RATE = 0.1
 
 LEARNING_RATE = 3e-4
 EPOCHS = 10
+
+
+def calculate_miou(logits, labels):
+    preds = (logits > 0.0).float()
+    labels = labels.float()
+    
+    intersection = (preds * labels).sum(dim=1)
+    union = (preds + labels).clamp(min=0, max=1).sum(dim=1)
+    
+    epsilon = 1e-6
+    
+    iou = (intersection + epsilon) / (union + epsilon)
+    
+    return iou.mean()
 
 
 class SimplePatchDataset(Dataset):
@@ -101,12 +115,16 @@ if __name__ == "__main__":
     
     print(f"\n--- Starting Training for {EPOCHS} Epochs ---")
     
+    best_val_miou = -1.0
+
     for epoch in range(EPOCHS):
         
         model.train()
         train_loss = 0.0
+        train_miou = 0.0
         
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1} Train"):
+        train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1} Train", leave=False)
+        for batch in train_pbar:
             img_embs = batch['img_embs'].to(device)
             txt_emb = batch['txt_emb'].to(device)
             labels = batch['labels'].to(device)
@@ -121,14 +139,24 @@ if __name__ == "__main__":
             
             optimizer.step()
             
+            miou = calculate_miou(logits.detach(), labels)
             train_loss += loss.item()
+            train_miou += miou.item()
+            
+            running_loss = train_loss / (train_pbar.n + 1)
+            running_miou = train_miou / (train_pbar.n + 1)
+            train_pbar.set_postfix(loss=f"{running_loss:.4f}", miou=f"{running_miou:.4f}")
         
         avg_train_loss = train_loss / len(train_loader)
-        
+        avg_train_miou = train_miou / len(train_loader)
+
         model.eval()
         val_loss = 0.0
+        val_miou = 0.0
+        
+        val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1} Val", leave=False)
         with torch.no_grad():
-            for batch in tqdm(val_loader, desc=f"Epoch {epoch+1} Val"):
+            for batch in val_pbar:
                 img_embs = batch['img_embs'].to(device)
                 txt_emb = batch['txt_emb'].to(device)
                 labels = batch['labels'].to(device)
@@ -137,13 +165,21 @@ if __name__ == "__main__":
                 
                 loss = loss_fn(logits, labels)
                 
+                miou = calculate_miou(logits, labels)
                 val_loss += loss.item()
+                val_miou += miou.item()
+                
+                running_loss = val_loss / (val_pbar.n + 1)
+                running_miou = val_miou / (val_pbar.n + 1)
+                val_pbar.set_postfix(loss=f"{running_loss:.4f}", miou=f"{running_miou:.4f}")
         
         avg_val_loss = val_loss / len(val_loader)
+        avg_val_miou = val_miou / len(val_loader)
         
-        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Train mIoU: {avg_train_miou:.4f} | Val Loss: {avg_val_loss:.4f} | Val mIoU: {avg_val_miou:.4f}")
+
+        torch.save(model.state_dict(), SAVE_PATH)
+        print(f"Model saved to {SAVE_PATH}")
 
     print("--- Training Complete ---")
-    
-    torch.save(model.state_dict(), "simple_projector.pth")
-    print("Model saved to simple_projector.pth")
+    print(f"Best model saved to {SAVE_PATH}")
