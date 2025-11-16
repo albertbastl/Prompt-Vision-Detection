@@ -153,7 +153,7 @@ def main():
     ap.add_argument("--image", default="./imgs/bike.jpg")
     ap.add_argument("--text", default="bicycle helmet")
     # --- CHANGED 2: UPDATE THE DEFAULT WEIGHTS FILE NAME (if needed) ---
-    ap.add_argument("--weights", default="simple_projector.pth") # Was "strict500_epoch09.pt"
+    ap.add_argument("--weights", default="miou.pt") # Was "strict500_epoch09.pt"
     # --- END CHANGED 2 ---
     
     ap.add_argument("--max_patches", type=int, default=410)
