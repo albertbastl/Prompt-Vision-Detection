@@ -66,24 +66,20 @@ class SimplePatchDataset(Dataset):
         }
 
 class SimpleProjector(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, drop: float):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, drop: float):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.GELU(),
             nn.Dropout(drop),
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.LayerNorm(hidden_dim // 2),
-            nn.GELU(),
-            nn.Dropout(drop),
-            nn.Linear(hidden_dim // 2, 1)
+            nn.Linear(hidden_dim, out_dim)
         )
 
-    def forward(self, img_embs, txt_emb):
-        txt_emb_expanded = txt_emb.unsqueeze(1).expand_as(img_embs)
-        combined_embs = img_embs + txt_emb_expanded
-        return self.net(combined_embs).squeeze(-1)
+    def forward(self, img_embs):
+        projected_embs = self.net(img_embs)
+        projected_embs = F.normalize(projected_embs, p=2, dim=-1)
+        return projected_embs
     
 if __name__ == "__main__":
     
@@ -152,10 +148,24 @@ if __name__ == "__main__":
             
             optimizer.zero_grad()
             
-            logits = model(img_embs, txt_emb)
+            projected_embs = model(img_embs)
             
-            labels_siglip = (labels * 2) - 1.0
-            loss = -F.logsigmoid(labels_siglip * logits).mean()
+            positive_masks = (labels == 1)
+            positive_projected_embs = projected_embs[positive_masks]
+
+            if positive_projected_embs.nelement() == 0:
+                continue
+
+            batch_indices = torch.arange(BATCH_SIZE, device=device).unsqueeze(1)
+            positive_batch_indices = batch_indices.expand_as(labels)[positive_masks]
+            target_txt_embs = txt_emb[positive_batch_indices]
+            
+            logits = torch.matmul(positive_projected_embs, txt_emb.T)
+
+            contrastive_labels = torch.zeros_like(logits, device=device)
+            contrastive_labels[torch.arange(len(positive_projected_embs)), positive_batch_indices] = 1.0
+            
+            loss = nn.BCEWithLogitsLoss()(logits, contrastive_labels)
             
             loss.backward()
             
