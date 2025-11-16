@@ -65,16 +65,12 @@ class SimplePatchDataset(Dataset):
 
 class SimpleProjector(nn.Module):
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, drop: float):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, drop: float):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.GELU(),
             nn.Dropout(drop),
-            nn.Linear(hidden_dim, out_dim)
-        )
-        self.logits_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
             nn.Linear(hidden_dim, out_dim)
         )
         self.logits_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
@@ -99,7 +95,7 @@ if __name__ == "__main__":
             "learning_rate": LEARNING_RATE,
             "epochs": EPOCHS,
             "batch_size": BATCH_SIZE,
-            "effective_batch_size": BATCH_SIZE * ACCUMULATION_STEPS,
+            "effective_batch_size": BATCH_SIZE,
             "embed_dim": EMBED_DIM,
             "hidden_dim": HIDDEN_DIM,
         }
