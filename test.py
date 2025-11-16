@@ -151,7 +151,7 @@ def sanitize(s: str):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--image", default="./imgs/bike.jpg")
-    ap.add_argument("--text", default="bicycle helmet")
+    ap.add_argument("--text", default="bicycle wheel")
     # --- CHANGED 2: UPDATE THE DEFAULT WEIGHTS FILE NAME (if needed) ---
     ap.add_argument("--weights", default="miou.pt") # Was "strict500_epoch09.pt"
     # --- END CHANGED 2 ---

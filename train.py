@@ -8,6 +8,7 @@ from torch.optim import AdamW
 from tqdm.auto import tqdm
 import wandb
 import random
+import torch.nn.functional as F
 
 TRAIN_DIR = "pd_10k_500patches/train"
 VAL_DIR = "pd_10k_500patches/val"
@@ -24,7 +25,7 @@ LEARNING_RATE = 3e-4
 EPOCHS = 20
 
 WANDB_PROJECT = "openvocab"
-WANDB_RUN_NAME = "BCE loss test"
+WANDB_RUN_NAME = "siglip loss"
 
 
 def calculate_miou(logits, labels):
@@ -129,8 +130,6 @@ if __name__ == "__main__":
     
     wandb.watch(model, log="all", log_freq=100)
     
-    loss_fn = nn.BCEWithLogitsLoss()
-    
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
     
     
@@ -155,7 +154,8 @@ if __name__ == "__main__":
             
             logits = model(img_embs, txt_emb)
             
-            loss = loss_fn(logits, labels)
+            labels_siglip = (labels * 2) - 1.0
+            loss = -F.logsigmoid(labels_siglip * logits).mean()
             
             loss.backward()
             
@@ -189,7 +189,8 @@ if __name__ == "__main__":
                 
                 logits = model(img_embs, txt_emb)
                 
-                loss = loss_fn(logits, labels)
+                labels_siglip = (labels * 2) - 1.0
+                loss = -F.logsigmoid(labels_siglip * logits).mean()
                 
                 miou = calculate_miou(logits, labels)
                 val_loss += loss.item()
@@ -204,6 +205,8 @@ if __name__ == "__main__":
                     sample_labels = labels[0]
                     gh, gw = grid_hw[0]
                     
+                    gh, gw = gh.item(), gw.item()
+
                     pred_mask = torch.sigmoid(sample_logits).reshape(gh, gw).cpu().numpy()
                     gt_mask = sample_labels.float().reshape(gh, gw).cpu().numpy()
                     
