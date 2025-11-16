@@ -120,17 +120,9 @@ if __name__ == "__main__":
         drop=DROP_RATE
     ).to(device)
     
-    text_projector = SimpleProjector(
-        in_dim=EMBED_DIM, 
-        hidden_dim=HIDDEN_DIM, 
-        out_dim=EMBED_DIM,
-        drop=DROP_RATE
-    ).to(device)
-    
-    all_params = itertools.chain(model.parameters(), text_projector.parameters())
+    all_params = itertools.chain(model.parameters())
     
     wandb.watch(model, log="all", log_freq=100)
-    wandb.watch(text_projector, log="all", log_freq=100)
     
     optimizer = AdamW(all_params, lr=LEARNING_RATE)
     
@@ -145,7 +137,6 @@ if __name__ == "__main__":
     for epoch in range(EPOCHS):
         
         model.train()
-        text_projector.train()
         train_loss = 0.0
         train_acc = 0.0
         
@@ -160,7 +151,6 @@ if __name__ == "__main__":
             B = txt_emb.shape[0]
             
             projected_img_embs = model(img_embs)
-            projected_txt_emb = text_projector(txt_emb)
             
             positive_masks = (labels == 1)
             positive_projected_embs = projected_img_embs[positive_masks]
@@ -172,7 +162,7 @@ if __name__ == "__main__":
             positive_batch_indices = batch_indices.expand_as(labels)[positive_masks]
            
 
-            logits = torch.matmul(positive_projected_embs, projected_txt_emb.T)
+            logits = torch.matmul(positive_projected_embs, txt_emb.T)
 
             temperature = model.logit_scale.exp()
             logits = logits * temperature
@@ -204,7 +194,6 @@ if __name__ == "__main__":
         avg_train_acc = train_acc / len(train_loader)
 
         model.eval()
-        text_projector.eval()
         val_loss = 0.0
         val_acc = 0.0
         
@@ -218,7 +207,6 @@ if __name__ == "__main__":
                 B = txt_emb.shape[0]
 
                 projected_img_embs = model(img_embs)
-                projected_txt_emb = text_projector(txt_emb)
                 
                 positive_masks = (labels == 1)
                 positive_projected_embs = projected_img_embs[positive_masks]
@@ -229,7 +217,7 @@ if __name__ == "__main__":
                 batch_indices = torch.arange(B, device=device).unsqueeze(1)
                 positive_batch_indices = batch_indices.expand_as(labels)[positive_masks]
 
-                logits = torch.matmul(positive_projected_embs, projected_txt_emb.T)
+                logits = torch.matmul(positive_projected_embs, txt_emb.T)
                 
                 contrastive_labels = torch.zeros_like(logits, device=device)
                 contrastive_labels[torch.arange(len(positive_projected_embs)), positive_batch_indices] = 1.0
@@ -262,7 +250,6 @@ if __name__ == "__main__":
             torch.save(
                 {
                     "image_projector": model.state_dict(),
-                    "text_projector": text_projector.state_dict(),
                 }, 
                 SAVE_PATH
             )
