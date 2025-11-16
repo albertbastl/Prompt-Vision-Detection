@@ -10,6 +10,7 @@ import wandb
 import random
 import torch.nn.functional as F
 import itertools
+import itertools
 
 TRAIN_DIR = "pd_10k_500patches/train"
 VAL_DIR = "pd_10k_500patches/validation"
@@ -29,6 +30,11 @@ WANDB_PROJECT = "openvocab"
 WANDB_RUN_NAME = "bs 256 acc no text projektor"
 
 
+def calculate_accuracy(logits, contrastive_labels):
+    preds = logits.argmax(dim=1)
+    ground_truth = contrastive_labels.argmax(dim=1)
+    acc = (preds == ground_truth).float().mean()
+    return acc
 def calculate_accuracy(logits, contrastive_labels):
     preds = logits.argmax(dim=1)
     ground_truth = contrastive_labels.argmax(dim=1)
@@ -59,6 +65,7 @@ class SimplePatchDataset(Dataset):
 
 class SimpleProjector(nn.Module):
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, drop: float):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, drop: float):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
@@ -68,7 +75,14 @@ class SimpleProjector(nn.Module):
             nn.Linear(hidden_dim, out_dim)
         )
         self.logits_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+            nn.Linear(hidden_dim, out_dim)
+        )
+        self.logits_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
+    def forward(self, img_embs):
+        projected_embs = self.net(img_embs)
+        projected_embs = F.normalize(projected_embs, p=2, dim=-1)
+        return projected_embs
     def forward(self, img_embs):
         projected_embs = self.net(img_embs)
         projected_embs = F.normalize(projected_embs, p=2, dim=-1)
@@ -85,6 +99,7 @@ if __name__ == "__main__":
             "learning_rate": LEARNING_RATE,
             "epochs": EPOCHS,
             "batch_size": BATCH_SIZE,
+            "effective_batch_size": BATCH_SIZE * ACCUMULATION_STEPS,
             "embed_dim": EMBED_DIM,
             "hidden_dim": HIDDEN_DIM,
         }
@@ -115,8 +130,11 @@ if __name__ == "__main__":
         in_dim=EMBED_DIM, 
         hidden_dim=HIDDEN_DIM, 
         out_dim=EMBED_DIM,
+        out_dim=EMBED_DIM,
         drop=DROP_RATE
     ).to(device)
+    
+    all_params = itertools.chain(model.parameters())
     
     all_params = itertools.chain(model.parameters())
     
@@ -125,10 +143,14 @@ if __name__ == "__main__":
     optimizer = AdamW(all_params, lr=LEARNING_RATE)
     
     loss_fn = nn.BCEWithLogitsLoss()
+    optimizer = AdamW(all_params, lr=LEARNING_RATE)
+    
+    loss_fn = nn.BCEWithLogitsLoss()
     
     
     print(f"\n--- Starting Training for {EPOCHS} Epochs ---")
     
+    best_val_acc = -1.0
     best_val_acc = -1.0
     global_step = 0
 
@@ -183,12 +205,16 @@ if __name__ == "__main__":
             running_loss = train_loss / (batch_idx + 1)
             running_acc = train_acc / (batch_idx + 1)
             train_pbar.set_postfix(loss=f"{running_loss:.4f}", acc=f"{running_acc:.4f}")
+            running_acc = train_acc / (batch_idx + 1)
+            train_pbar.set_postfix(loss=f"{running_loss:.4f}", acc=f"{running_acc:.4f}")
             
         avg_train_loss = train_loss / len(train_loader)
+        avg_train_acc = train_acc / len(train_loader)
         avg_train_acc = train_acc / len(train_loader)
 
         model.eval()
         val_loss = 0.0
+        val_acc = 0.0
         val_acc = 0.0
         
         val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1} Val", leave=False)
@@ -219,26 +245,64 @@ if __name__ == "__main__":
                 loss = loss_fn(logits, contrastive_labels)
                 
                 acc = calculate_accuracy(logits, contrastive_labels)
+                
+                B = txt_emb.shape[0]
+
+                projected_img_embs = model(img_embs)
+                
+                positive_masks = (labels == 1)
+                positive_projected_embs = projected_img_embs[positive_masks]
+
+                if positive_projected_embs.nelement() == 0:
+                    continue
+                
+                batch_indices = torch.arange(B, device=device).unsqueeze(1)
+                positive_batch_indices = batch_indices.expand_as(labels)[positive_masks]
+
+                logits = torch.matmul(positive_projected_embs, txt_emb.T)
+                
+                contrastive_labels = torch.zeros_like(logits, device=device)
+                contrastive_labels[torch.arange(len(positive_projected_embs)), positive_batch_indices] = 1.0
+
+                loss = loss_fn(logits, contrastive_labels)
+                
+                acc = calculate_accuracy(logits, contrastive_labels)
                 val_loss += loss.item()
+                val_acc += acc.item()
                 val_acc += acc.item()
                 
                 running_loss = val_loss / (batch_idx + 1)
                 running_acc = val_acc / (batch_idx + 1)
                 val_pbar.set_postfix(loss=f"{running_loss:.4f}", acc=f"{running_acc:.4f}")
+                running_acc = val_acc / (batch_idx + 1)
+                val_pbar.set_postfix(loss=f"{running_loss:.4f}", acc=f"{running_acc:.4f}")
         
         avg_val_loss = val_loss / len(val_loader)
         avg_val_acc = val_acc / len(val_loader)
+        avg_val_acc = val_acc / len(val_loader)
         
+        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Train Acc: {avg_train_acc:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {avg_val_acc:.4f}")
         print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Train Acc: {avg_train_acc:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {avg_val_acc:.4f}")
 
         wandb.log({
             "train/epoch_loss": avg_train_loss,
             "train/epoch_acc": avg_train_acc,
+            "train/epoch_acc": avg_train_acc,
             "val/epoch_loss": avg_val_loss,
+            "val/epoch_acc": avg_val_acc,
             "val/epoch_acc": avg_val_acc,
             "epoch": epoch + 1
         }, step=global_step)
         
+        if avg_val_acc > best_val_acc:
+            best_val_acc = avg_val_acc
+            torch.save(
+                {
+                    "image_projector": model.state_dict(),
+                }, 
+                SAVE_PATH
+            )
+            print(f"New best model saved to {SAVE_PATH} (Acc: {best_val_acc:.4f})")
         if avg_val_acc > best_val_acc:
             best_val_acc = avg_val_acc
             torch.save(
