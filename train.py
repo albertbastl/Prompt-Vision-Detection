@@ -121,6 +121,7 @@ if __name__ == "__main__":
     model = SimpleProjector(
         in_dim=EMBED_DIM, 
         hidden_dim=HIDDEN_DIM, 
+        out_dim=EMBED_DIM,
         drop=DROP_RATE
     ).to(device)
     
