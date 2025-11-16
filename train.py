@@ -9,12 +9,14 @@ from tqdm.auto import tqdm
 import wandb
 import random
 import torch.nn.functional as F
+import itertools
 
 TRAIN_DIR = "pd_10k_500patches/train"
 VAL_DIR = "pd_10k_500patches/val"
 SAVE_PATH = "miou.pt"
 
-BATCH_SIZE = 64
+BATCH_SIZE = 256
+ACCUMULATION_STEPS = 4
 NUM_WORKERS = 4
 
 EMBED_DIM = 768
@@ -25,21 +27,14 @@ LEARNING_RATE = 3e-4
 EPOCHS = 20
 
 WANDB_PROJECT = "openvocab"
-WANDB_RUN_NAME = "siglip loss"
+WANDB_RUN_NAME = "davids correction with accumulation bs 256"
 
 
-def calculate_miou(logits, labels):
-    preds = (logits > 0.0).float()
-    labels = labels.float()
-    
-    intersection = (preds * labels).sum(dim=1)
-    union = (preds + labels).clamp(min=0, max=1).sum(dim=1)
-    
-    epsilon = 1e-6
-    
-    iou = (intersection + epsilon) / (union + epsilon)
-    
-    return iou.mean()
+def calculate_accuracy(logits, contrastive_labels):
+    preds = logits.argmax(dim=1)
+    ground_truth = contrastive_labels.argmax(dim=1)
+    acc = (preds == ground_truth).float().mean()
+    return acc
 
 
 class SimplePatchDataset(Dataset):
@@ -56,34 +51,28 @@ class SimplePatchDataset(Dataset):
         img_patch_embs = torch.from_numpy(data['img_patch_embs']).float()
         txt_emb = torch.from_numpy(data['txt_emb']).float()
         labels = torch.from_numpy(data['labels']).float()
-        grid_hw = torch.from_numpy(data['grid_hw']).int()
         
         return {
             "img_embs": img_patch_embs,
             "txt_emb": txt_emb,
             "labels": labels,
-            "grid_hw": grid_hw
         }
 
 class SimpleProjector(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, drop: float):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, drop: float):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.GELU(),
             nn.Dropout(drop),
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.LayerNorm(hidden_dim // 2),
-            nn.GELU(),
-            nn.Dropout(drop),
-            nn.Linear(hidden_dim // 2, 1)
+            nn.Linear(hidden_dim, out_dim)
         )
 
-    def forward(self, img_embs, txt_emb):
-        txt_emb_expanded = txt_emb.unsqueeze(1).expand_as(img_embs)
-        combined_embs = img_embs + txt_emb_expanded
-        return self.net(combined_embs).squeeze(-1)
+    def forward(self, img_embs):
+        projected_embs = self.net(img_embs)
+        projected_embs = F.normalize(projected_embs, p=2, dim=-1)
+        return projected_embs
     
 if __name__ == "__main__":
     
@@ -96,6 +85,7 @@ if __name__ == "__main__":
             "learning_rate": LEARNING_RATE,
             "epochs": EPOCHS,
             "batch_size": BATCH_SIZE,
+            "effective_batch_size": BATCH_SIZE * ACCUMULATION_STEPS,
             "embed_dim": EMBED_DIM,
             "hidden_dim": HIDDEN_DIM,
         }
@@ -125,24 +115,40 @@ if __name__ == "__main__":
     model = SimpleProjector(
         in_dim=EMBED_DIM, 
         hidden_dim=HIDDEN_DIM, 
+        out_dim=EMBED_DIM,
         drop=DROP_RATE
     ).to(device)
     
-    wandb.watch(model, log="all", log_freq=100)
+    text_projector = SimpleProjector(
+        in_dim=EMBED_DIM, 
+        hidden_dim=HIDDEN_DIM, 
+        out_dim=EMBED_DIM,
+        drop=DROP_RATE
+    ).to(device)
     
-    optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
+    all_params = itertools.chain(model.parameters(), text_projector.parameters())
+    
+    wandb.watch(model, log="all", log_freq=100)
+    wandb.watch(text_projector, log="all", log_freq=100)
+    
+    optimizer = AdamW(all_params, lr=LEARNING_RATE)
+    
+    loss_fn = nn.BCEWithLogitsLoss()
     
     
     print(f"\n--- Starting Training for {EPOCHS} Epochs ---")
     
-    best_val_miou = -1.0
+    best_val_acc = -1.0
     global_step = 0
 
     for epoch in range(EPOCHS):
         
         model.train()
+        text_projector.train()
         train_loss = 0.0
-        train_miou = 0.0
+        train_acc = 0.0
+        
+        optimizer.zero_grad()
         
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1} Train", leave=False)
         for batch_idx, batch in enumerate(train_pbar):
@@ -150,34 +156,52 @@ if __name__ == "__main__":
             txt_emb = batch['txt_emb'].to(device)
             labels = batch['labels'].to(device)
             
-            optimizer.zero_grad()
+            B = txt_emb.shape[0]
             
-            logits = model(img_embs, txt_emb)
+            projected_img_embs = model(img_embs)
+            projected_txt_emb = text_projector(txt_emb)
             
-            labels_siglip = (labels * 2) - 1.0
-            loss = -F.logsigmoid(labels_siglip * logits).mean()
+            positive_masks = (labels == 1)
+            positive_projected_embs = projected_img_embs[positive_masks]
+
+            if positive_projected_embs.nelement() == 0:
+                continue
+
+            batch_indices = torch.arange(B, device=device).unsqueeze(1)
+            positive_batch_indices = batch_indices.expand_as(labels)[positive_masks]
+            
+            logits = torch.matmul(positive_projected_embs, projected_txt_emb.T)
+
+            contrastive_labels = torch.zeros_like(logits, device=device)
+            contrastive_labels[torch.arange(len(positive_projected_embs)), positive_batch_indices] = 1.0
+            
+            loss = loss_fn(logits, contrastive_labels)
+            
+            loss = loss / ACCUMULATION_STEPS
             
             loss.backward()
             
-            optimizer.step()
+            if (batch_idx + 1) % ACCUMULATION_STEPS == 0 or (batch_idx + 1) == len(train_loader):
+                optimizer.step()
+                optimizer.zero_grad()
+            
             global_step += 1
             
-            miou = calculate_miou(logits.detach(), labels)
-            train_loss += loss.item()
-            train_miou += miou.item()
+            acc = calculate_accuracy(logits.detach(), contrastive_labels)
+            train_loss += loss.item() * ACCUMULATION_STEPS
+            train_acc += acc.item()
             
             running_loss = train_loss / (batch_idx + 1)
-            running_miou = train_miou / (batch_idx + 1)
-            train_pbar.set_postfix(loss=f"{running_loss:.4f}", miou=f"{running_miou:.4f}")
+            running_acc = train_acc / (batch_idx + 1)
+            train_pbar.set_postfix(loss=f"{running_loss:.4f}", acc=f"{running_acc:.4f}")
             
         avg_train_loss = train_loss / len(train_loader)
-        avg_train_miou = train_miou / len(train_loader)
+        avg_train_acc = train_acc / len(train_loader)
 
         model.eval()
+        text_projector.eval()
         val_loss = 0.0
-        val_miou = 0.0
-        
-        log_val_batch_idx = random.randint(0, len(val_loader) - 1)
+        val_acc = 0.0
         
         val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1} Val", leave=False)
         with torch.no_grad():
@@ -185,63 +209,59 @@ if __name__ == "__main__":
                 img_embs = batch['img_embs'].to(device)
                 txt_emb = batch['txt_emb'].to(device)
                 labels = batch['labels'].to(device)
-                grid_hw = batch['grid_hw']
                 
-                logits = model(img_embs, txt_emb)
+                B = txt_emb.shape[0]
+
+                projected_img_embs = model(img_embs)
+                projected_txt_emb = text_projector(txt_emb)
                 
-                labels_siglip = (labels * 2) - 1.0
-                loss = -F.logsigmoid(labels_siglip * logits).mean()
+                positive_masks = (labels == 1)
+                positive_projected_embs = projected_img_embs[positive_masks]
+
+                if positive_projected_embs.nelement() == 0:
+                    continue
                 
-                miou = calculate_miou(logits, labels)
+                batch_indices = torch.arange(B, device=device).unsqueeze(1)
+                positive_batch_indices = batch_indices.expand_as(labels)[positive_masks]
+
+                logits = torch.matmul(positive_projected_embs, projected_txt_emb.T)
+                
+                contrastive_labels = torch.zeros_like(logits, device=device)
+                contrastive_labels[torch.arange(len(positive_projected_embs)), positive_batch_indices] = 1.0
+
+                loss = loss_fn(logits, contrastive_labels)
+                
+                acc = calculate_accuracy(logits, contrastive_labels)
                 val_loss += loss.item()
-                val_miou += miou.item()
+                val_acc += acc.item()
                 
                 running_loss = val_loss / (batch_idx + 1)
-                running_miou = val_miou / (batch_idx + 1)
-                val_pbar.set_postfix(loss=f"{running_loss:.4f}", miou=f"{running_miou:.4f}")
-
-                if batch_idx == log_val_batch_idx:
-                    sample_logits = logits[0]
-                    sample_labels = labels[0]
-                    gh, gw = grid_hw[0]
-                    
-                    gh, gw = gh.item(), gw.item()
-
-                    pred_mask = torch.sigmoid(sample_logits).reshape(gh, gw).cpu().numpy()
-                    gt_mask = sample_labels.float().reshape(gh, gw).cpu().numpy()
-                    
-                    gt_mask_rgb = np.stack([gt_mask]*3, axis=-1)
-                    pred_mask_rgb = np.stack([pred_mask]*3, axis=-1)
-
-                    border_rgb = np.zeros((gh, 1, 3), dtype=np.float32)
-                    border_rgb[:, :, 0] = 1.0
-                    
-                    combined_mask = np.concatenate((gt_mask_rgb, border_rgb, pred_mask_rgb), axis=1)
-
-                    wandb.log({
-                        "val/Mask Comparison": wandb.Image(
-                            combined_mask, 
-                            caption=f"Epoch {epoch+1} | GT (left) vs Pred (right)"
-                        )
-                    }, step=global_step)
+                running_acc = val_acc / (batch_idx + 1)
+                val_pbar.set_postfix(loss=f"{running_loss:.4f}", acc=f"{running_acc:.4f}")
         
         avg_val_loss = val_loss / len(val_loader)
-        avg_val_miou = val_miou / len(val_loader)
+        avg_val_acc = val_acc / len(val_loader)
         
-        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Train mIoU: {avg_train_miou:.4f} | Val Loss: {avg_val_loss:.4f} | Val mIoU: {avg_val_miou:.4f}")
+        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Train Acc: {avg_train_acc:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {avg_val_acc:.4f}")
 
         wandb.log({
             "train/epoch_loss": avg_train_loss,
-            "train/epoch_miou": avg_train_miou,
+            "train/epoch_acc": avg_train_acc,
             "val/epoch_loss": avg_val_loss,
-            "val/epoch_miou": avg_val_miou,
+            "val/epoch_acc": avg_val_acc,
             "epoch": epoch + 1
         }, step=global_step)
         
-        if avg_val_miou > best_val_miou:
-            best_val_miou = avg_val_miou
-            torch.save(model.state_dict(), SAVE_PATH)
-            print(f"New best model saved to {SAVE_PATH} (mIoU: {best_val_miou:.4f})")
+        if avg_val_acc > best_val_acc:
+            best_val_acc = avg_val_acc
+            torch.save(
+                {
+                    "image_projector": model.state_dict(),
+                    "text_projector": text_projector.state_dict(),
+                }, 
+                SAVE_PATH
+            )
+            print(f"New best model saved to {SAVE_PATH} (Acc: {best_val_acc:.4f})")
             wandb.save(SAVE_PATH)
 
     print("--- Training Complete ---")
