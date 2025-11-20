@@ -10,40 +10,35 @@ import wandb
 import itertools
 import torch.nn.functional as F
 
-# --- Constants ---
-TRAIN_DIR = "pd_10k_500patches/train"
-VAL_DIR = "pd_10k_500patches/val"
-SAVE_PATH = "miou_siglip.pt"
+TRAIN_DIR = "pd_10k_500patches_nonormatall/train"
+VAL_DIR = "pd_10k_500patches_nonormatall/val"
+# Changed default save name to be generic, specific epoch names are generated in loop
+BEST_SAVE_PATH = "siglip_exact_tunes_nonormatall.pt" 
 
-BATCH_SIZE = 16
+BATCH_SIZE = 64
 NUM_WORKERS = 4
 EMBED_DIM = 768
 HIDDEN_DIM = 512
 DROP_RATE = 0.1
-LEARNING_RATE = 3e-4
-EPOCHS = 20
+
+# --- Hyperparameters Updated ---
+LEARNING_RATE = 1e-3
+WEIGHT_DECAY = 1e-4
+CLIP_GRAD = 1.0
+EPOCHS = 10
 
 WANDB_PROJECT = "openvocab"
-WANDB_RUN_NAME = "bs 16 siglip exact"
+WANDB_RUN_NAME = "nonormatall 10 epoch siglip exact, added tunes by david"
 
 def calculate_accuracy(logits, contrastive_labels):
-    """
-    Calculates accuracy for the contrastive task.
-    In the -1/1 label setup, we still look for the max logit 
-    and compare it to the index of the positive (1) label.
-    """
-    # logits shape: [N_patches, N_texts]
-    # contrastive_labels shape: [N_patches, N_texts] (values are -1 or 1)
-    
     preds = logits.argmax(dim=1)
-    ground_truth = contrastive_labels.argmax(dim=1) # The index where value is 1
+    ground_truth = contrastive_labels.argmax(dim=1)
     acc = (preds == ground_truth).float().mean()
     return acc
 
 class SimplePatchDataset(Dataset):
     def __init__(self, data_dir):
         self.file_paths = sorted(glob.glob(os.path.join(data_dir, "*.npz")))
-        # Mocking file paths for standalone runnability if dir missing
         if not self.file_paths:
             print(f"Warning: No .npz files found in {data_dir}. Using dummy data mode.")
             self.dummy_mode = True
@@ -55,11 +50,10 @@ class SimplePatchDataset(Dataset):
         
     def __getitem__(self, idx):
         if self.dummy_mode:
-            # Generate dummy data for testing
             return {
-                "img_embs": torch.randn(5, 768), # 5 patches per file
+                "img_embs": torch.randn(5, 768),
                 "txt_emb": torch.randn(768),
-                "labels": torch.tensor([0, 1, 0, 0, 1]).float() # Mixed labels
+                "labels": torch.tensor([0, 1, 0, 0, 1]).float()
             }
 
         file_path = self.file_paths[idx]
@@ -85,29 +79,16 @@ class SimpleProjector(nn.Module):
             nn.Dropout(drop),
             nn.Linear(hidden_dim, out_dim)
         )
-        # Learnable Temperature (t_prime in snippet)
         self.logits_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        # Learnable Bias (b in snippet) - Initialize to roughly -10 to ensure sigmoid starts closed
         self.logits_bias = nn.Parameter(torch.ones([]) * -10.0)
 
     def forward(self, img_embs):
         projected_embs = self.net(img_embs)
-        # Line 7: zimg = l2_normalize(img_emb)
         projected_embs = F.normalize(projected_embs, p=2, dim=-1)
         return projected_embs
 
 def siglip_loss(logits, labels, normalize_factor):
-    """
-    Line 11: l = -sum(log_sigmoid(labels * logits)) / n
-    """
-    # labels are -1 and 1
-    # logits are (dot_product * t + b)
-    
-    # F.logsigmoid(x) is mathematically equivalent to -softplus(-x)
-    # Corresponds to log(sigmoid(labels * logits))
     log_probs = F.logsigmoid(labels * logits)
-    
-    # Sum over all pairs, then divide by N (batch size, not total elements)
     loss = -torch.sum(log_probs) / normalize_factor
     return loss
 
@@ -115,13 +96,14 @@ if __name__ == "__main__":
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    # Initialize WandB (disabled for dummy run)
     wandb.init(
         project=WANDB_PROJECT,
         name=WANDB_RUN_NAME,
         mode="disabled" if not os.path.exists(TRAIN_DIR) else "online",
         config={
             "learning_rate": LEARNING_RATE,
+            "weight_decay": WEIGHT_DECAY,
+            "gradient_clip": CLIP_GRAD,
             "epochs": EPOCHS,
             "batch_size": BATCH_SIZE,
             "embed_dim": EMBED_DIM,
@@ -143,11 +125,14 @@ if __name__ == "__main__":
     
     wandb.watch(model, log="all", log_freq=100)
 
-    optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
+    optimizer = AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     
     print(f"\n--- Starting Training for {EPOCHS} Epochs (SigLIP Style) ---")
     
     best_val_acc = -1.0
+    
+    # List to keep track of the last 3 checkpoints
+    recent_checkpoints = [] 
 
     for epoch in range(EPOCHS):
         
@@ -155,65 +140,44 @@ if __name__ == "__main__":
         train_loss = 0.0
         train_acc = 0.0
         
-        # Use global step for accurate logging if needed
-        
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1} Train", leave=False)
         for batch_idx, batch in enumerate(train_pbar):
-            img_embs = batch['img_embs'].to(device) # [B, num_patches, Dim]
-            txt_emb = batch['txt_emb'].to(device)   # [B, Dim]
-            labels = batch['labels'].to(device)     # [B, num_patches]
+            img_embs = batch['img_embs'].to(device)
+            txt_emb = batch['txt_emb'].to(device)
+            labels = batch['labels'].to(device)
             
-            B = txt_emb.shape[0] # Mini-batch size 'n'
+            B = txt_emb.shape[0]
             
             optimizer.zero_grad()
             
-            # 1. Project Image Embeddings
-            projected_img_embs = model(img_embs) # [B, num_patches, Dim]
+            projected_img_embs = model(img_embs)
             
-            # 2. Flatten patches logic
-            # We only want to compute loss on patches that are actually labeled as positive
-            # for the specific image they belong to.
             positive_masks = (labels == 1)
-            positive_projected_embs = projected_img_embs[positive_masks] # [N_total_pos_patches, Dim]
+            positive_projected_embs = projected_img_embs[positive_masks]
 
             if positive_projected_embs.nelement() == 0:
                 continue
 
-            # Line 8: ztxt = l2_normalize(txt_emb)
             normalized_txt = F.normalize(txt_emb, p=2, dim=-1)
 
-            # 3. Compute Dot Product (Cosine Similarity)
-            # Shape: [N_total_pos_patches, B]
-            # This compares every valid patch against EVERY text in the batch
             sim_matrix = torch.matmul(positive_projected_embs, normalized_txt.T)
 
-            # 4. Apply Temperature and Bias
-            # Line 6 & 9: logits = dot(...) * t + b
             temperature = model.logits_scale.exp()
             bias = model.logits_bias
             logits = sim_matrix * temperature + bias
 
-            # 5. Construct Labels (-1 / 1)
-            # Determine which text index belongs to which image patch
-            batch_indices = torch.arange(B, device=device).unsqueeze(1) # [B, 1]
-            # Expand batch indices to match mask shape [B, num_patches]
-            # Select indices corresponding to positive_masks
+            batch_indices = torch.arange(B, device=device).unsqueeze(1)
             positive_batch_indices = batch_indices.expand_as(labels)[positive_masks]
             
-            # Initialize labels to -1 (Line 10: labels = -ones(n) + diagonal correction)
             contrastive_labels = -torch.ones_like(logits, device=device)
-            
-            # Set the "diagonal" (correct text matches) to +1
-            # contrastive_labels[row, correct_column] = 1
             contrastive_labels[torch.arange(len(positive_projected_embs)), positive_batch_indices] = 1.0
             
-            # 6. Compute Sigmoid Loss
             loss = siglip_loss(logits, contrastive_labels, normalize_factor=B)
             
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=CLIP_GRAD)
             optimizer.step()
             
-            # Metrics
             acc = calculate_accuracy(logits.detach(), contrastive_labels)
             train_loss += loss.item()
             train_acc += acc.item()
@@ -223,7 +187,6 @@ if __name__ == "__main__":
         avg_train_loss = train_loss / len(train_loader)
         avg_train_acc = train_acc / len(train_loader)
 
-        # --- Validation Loop ---
         model.eval()
         val_loss = 0.0
         val_acc = 0.0
@@ -264,17 +227,36 @@ if __name__ == "__main__":
         else:
             avg_val_loss, avg_val_acc = 0, 0
         
-        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Val Acc: {avg_val_acc:.4f}")
+        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Train Acc: {avg_train_acc:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {avg_val_acc:.4f}")
 
         wandb.log({
             "train/loss": avg_train_loss,
+            "train/acc": avg_train_acc,
+            "val/loss": avg_val_loss,
             "val/acc": avg_val_acc,
             "epoch": epoch + 1
         })
         
+        # --- SAVE LOGIC: Best Model ---
         if avg_val_acc > best_val_acc:
             best_val_acc = avg_val_acc
-            torch.save(model.state_dict(), SAVE_PATH)
-            print(f"Saved best model: {best_val_acc:.4f}")
+            torch.save(model.state_dict(), BEST_SAVE_PATH)
+            print(f"Saved new best model: {best_val_acc:.4f}")
+            wandb.save(BEST_SAVE_PATH)
+
+        # --- SAVE LOGIC: Last 3 Epochs (Rolling) ---
+        epoch_ckpt_name = f"checkpoint_epoch_{epoch+1}.pt"
+        torch.save(model.state_dict(), epoch_ckpt_name)
+        
+        # Upload this specific epoch checkpoint to wandb
+        wandb.save(epoch_ckpt_name)
+        
+        # Add to list and manage local files
+        recent_checkpoints.append(epoch_ckpt_name)
+        if len(recent_checkpoints) > 3:
+            oldest_ckpt = recent_checkpoints.pop(0)
+            if os.path.exists(oldest_ckpt):
+                print(f"Removing old checkpoint locally: {oldest_ckpt}")
+                os.remove(oldest_ckpt)
 
     wandb.finish()

@@ -15,6 +15,9 @@
 wandb
 imgs
 pd_10k_500patches
+pd_10k_500patches_nonorm
+pd_10k_500patches_nonormatall
+pd_30k_500patches_imgnorm
 
 .gitignore
 

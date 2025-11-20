@@ -9,12 +9,12 @@ from tqdm.auto import tqdm
 
 
 CKPT = "google/siglip2-base-patch16-naflex"
-OUT_DIR = "pd_10k_500patches_strict"
+OUT_DIR = "pd_30k_500patches_imgnorm"
 TARGET_PATCHES = 500
 PATCH_SIZE = 16
 
-TRAIN_COUNT = 10000
-VAL_COUNT = 1000
+TRAIN_COUNT = 30000
+VAL_COUNT = 3000
 
 
 print("Loading SigLIP model...")
@@ -37,9 +37,9 @@ def encode_image(pil_img):
     })
     
     feats = out.last_hidden_state[0].float()[batch["pixel_attention_mask"][0].bool()]
-    grid_feats_normalized = F.normalize(feats, p=2, dim=-1)
+    # grid_feats_normalized = F.normalize(feats, p=2, dim=-1)
     
-    return grid_feats_normalized.cpu().numpy(), (gh, gw)
+    return feats.cpu().numpy(), (gh, gw)
 
 @torch.no_grad()
 def encode_text(text: str):
