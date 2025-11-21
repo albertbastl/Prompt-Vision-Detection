@@ -14,7 +14,7 @@ from transformers import get_cosine_schedule_with_warmup
 TRAIN_DIR = "pd_30k_500patches_imgnorm/train"
 VAL_DIR = "pd_30k_500patches_imgnorm/val"
 # Changed default save name to be generic, specific epoch names are generated in loop
-BEST_SAVE_PATH = "30k_broken_imgnonorm.pt" 
+BEST_SAVE_PATH = "30k_hopefullyfixed.pt" 
 
 BATCH_SIZE = 64
 NUM_WORKERS = 4
@@ -29,7 +29,7 @@ CLIP_GRAD = 1.0
 EPOCHS = 10
 
 WANDB_PROJECT = "openvocab"
-WANDB_RUN_NAME = "30k broken version without img norm"
+WANDB_RUN_NAME = "30k with fixes to lr temp and bias"
 
 def calculate_accuracy(logits, contrastive_labels):
     preds = logits.argmax(dim=1)

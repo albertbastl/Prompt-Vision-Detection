@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel, AutoProcessor
+import matplotlib.pyplot as plt
 
 # --- keep these in sync with training ---
 PATCHES = 16
@@ -54,7 +55,6 @@ def encode_image_tokens(pil_img, siglip, processor, device):
     )
     feats = out.last_hidden_state[0].float()[batch["pixel_attention_mask"][0].bool()]
     grid_feats = feats.view(gh, gw, -1)
-    # grid_feats_normalized = torch.nn.functional.normalize(grid_feats, p=2, dim=-1)
     return grid_feats.cpu().numpy().astype(np.float32)
 
 @torch.no_grad()
@@ -65,7 +65,6 @@ def encode_text_emb(text, siglip, processor, device):
     emb = torch.nn.functional.normalize(emb, p=2, dim=-1)
     return emb.squeeze(0).cpu().numpy().astype(np.float32)
 
-# color mapping / legend utilities (kept from your script)
 STOPS = [
     (0.00, (0,   0, 130)), (0.33, (0, 180, 255)),
     (0.66, (255, 255, 0)), (1.00, (255,   0,   0)),
@@ -131,32 +130,29 @@ class SimpleProjector(nn.Module):
             nn.Dropout(drop),
             nn.Linear(hidden_dim, out_dim)
         )
-        # temperature and bias parameters from training
         self.logits_scale = nn.Parameter(torch.ones([]) * math.log(1 / 0.07))
         self.logits_bias = nn.Parameter(torch.ones([]) * -10.0)
 
     def forward(self, x):
-        # x: (..., in_dim) -> (..., out_dim)
         return F.normalize(self.net(x), p=2, dim=-1)
 # ---------------------------------------------
 
 def main():
-    import matplotlib.pyplot as plt
-
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", default="./imgs/car.jpg")
-    ap.add_argument("--text", default="car")
-    ap.add_argument("--weights", default="epoch2_wandb.pt")
+    ap.add_argument("--image", default="./imgs/ball.jpg")
+    ap.add_argument("--text", default="Volleyball (Ball)")
+    ap.add_argument("--weights", default="30k_hopefullyfixed.pt")
     ap.add_argument("--max_patches", type=int, default=500)
     ap.add_argument("--alpha", type=int, default=150)
     args = ap.parse_args()
 
     if not os.path.exists(args.image):
-        raise FileNotFoundError(f"Image not found: {args.image}")
+        print(f"Image not found: {args.image}")
+        return
     if not os.path.exists(args.weights):
-        raise FileNotFoundError(f"Weights not found: {args.weights}")
+        print(f"Weights not found: {args.weights}")
+        return
 
-    # Load & resize
     img_orig = Image.open(args.image).convert("RGB")
     img_fit  = fit_image_to_patch_budget(img_orig, max_patches=args.max_patches)
 
@@ -165,12 +161,8 @@ def main():
     txt_emb    = encode_text_emb(args.text, siglip, processor, device)
 
     gh, gw, D = img_tokens.shape
-    assert D == EMBED_DIM
-
-    # Flatten
     patches = img_tokens.reshape(-1, D)
 
-    # Load projector
     model = SimpleProjector(
         in_dim=EMBED_DIM,
         hidden_dim=HIDDEN_DIM,
@@ -199,16 +191,30 @@ def main():
         logits = sims * model.logits_scale.exp() + model.logits_bias
         probs  = torch.sigmoid(logits).cpu().numpy().reshape(gh, gw)
 
-    # Build heatmap overlay
+    # --- NEW PRINT STATEMENTS ---
+    print(f"\n--- Probabilities for '{args.text}' ---")
+    print(f"Min:  {probs.min():.4f}")
+    print(f"Max:  {probs.max():.4f}")
+    print(f"Mean: {probs.mean():.4f}")
+    print("-" * 30)
+    # ----------------------------
+
+    # --- Min-Max Normalization (Relative Scaling) ---
+    # What it does: Forces the lowest score in the image to 0.0 (Blue) and the highest to 1.0 (Red).
+    # Formula: probs = (probs - probs.min()) / (probs.max() - probs.min())
+    # Why use it: It guarantees maximum contrast. Even if the model is "unsure" (e.g., max prob is only 0.1), it will paint that 0.1 area bright Red.
+    # Danger: It can be misleading. It makes noise look like a confident detection.
+    if probs.max() > probs.min():
+        probs = (probs - probs.min()) / (probs.max() - probs.min())
+
     blocky = grid_to_blocky_rgba(probs, (img_orig.width, img_orig.height), alpha=args.alpha)
     legend = make_vertical_legend(height=img_orig.height)
     composite = compose_overlay_with_legend(img_orig, blocky, legend)
 
-    # ---- SHOW INSTEAD OF SAVE ----
     plt.figure(figsize=(10, 10))
     plt.imshow(composite)
     plt.axis("off")
-    plt.title(f"Text: {args.text}")
+    plt.title(f"Text: {args.text}\nMax Prob: {probs.max():.2f}")
     plt.show()
 
 if __name__ == "__main__":
