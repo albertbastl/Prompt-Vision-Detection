@@ -9,11 +9,12 @@ from tqdm.auto import tqdm
 import wandb
 import itertools
 import torch.nn.functional as F
+from transformers import get_cosine_schedule_with_warmup
 
-TRAIN_DIR = "pd_10k_500patches_nonormatall/train"
-VAL_DIR = "pd_10k_500patches_nonormatall/val"
+TRAIN_DIR = "pd_30k_500patches_imgnorm/train"
+VAL_DIR = "pd_30k_500patches_imgnorm/val"
 # Changed default save name to be generic, specific epoch names are generated in loop
-BEST_SAVE_PATH = "siglip_exact_tunes_nonormatall.pt" 
+BEST_SAVE_PATH = "30k_broken_imgnonorm.pt" 
 
 BATCH_SIZE = 64
 NUM_WORKERS = 4
@@ -28,7 +29,7 @@ CLIP_GRAD = 1.0
 EPOCHS = 10
 
 WANDB_PROJECT = "openvocab"
-WANDB_RUN_NAME = "nonormatall 10 epoch siglip exact, added tunes by david"
+WANDB_RUN_NAME = "30k broken version without img norm"
 
 def calculate_accuracy(logits, contrastive_labels):
     preds = logits.argmax(dim=1)
@@ -79,8 +80,8 @@ class SimpleProjector(nn.Module):
             nn.Dropout(drop),
             nn.Linear(hidden_dim, out_dim)
         )
-        self.logits_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        self.logits_bias = nn.Parameter(torch.ones([]) * -10.0)
+        self.logits_scale = nn.Parameter(torch.ones([]) * np.log(10))
+        self.logits_bias = nn.Parameter(torch.ones([]) * -5.0)
 
     def forward(self, img_embs):
         projected_embs = self.net(img_embs)
@@ -126,6 +127,12 @@ if __name__ == "__main__":
     wandb.watch(model, log="all", log_freq=100)
 
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=int(0.1 * len(train_loader) * EPOCHS),
+        num_training_steps=len(train_loader) * EPOCHS
+    )
     
     print(f"\n--- Starting Training for {EPOCHS} Epochs (SigLIP Style) ---")
     
@@ -163,6 +170,7 @@ if __name__ == "__main__":
             sim_matrix = torch.matmul(positive_projected_embs, normalized_txt.T)
 
             temperature = model.logits_scale.exp()
+            temperature = torch.clamp(temperature, max=100.0)
             bias = model.logits_bias
             logits = sim_matrix * temperature + bias
 
@@ -177,6 +185,7 @@ if __name__ == "__main__":
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=CLIP_GRAD)
             optimizer.step()
+            scheduler.step()
             
             acc = calculate_accuracy(logits.detach(), contrastive_labels)
             train_loss += loss.item()

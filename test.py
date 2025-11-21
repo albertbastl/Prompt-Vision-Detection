@@ -62,7 +62,7 @@ def encode_text_emb(text, siglip, processor, device):
     toks = processor(text=[text], return_tensors="pt", padding=True, truncation=True)
     toks = {k: v.to(device) for k, v in toks.items() if k in ("input_ids","attention_mask")}
     emb = siglip.text_model(**toks).pooler_output
-    # emb = torch.nn.functional.normalize(emb, p=2, dim=-1)
+    emb = torch.nn.functional.normalize(emb, p=2, dim=-1)
     return emb.squeeze(0).cpu().numpy().astype(np.float32)
 
 # color mapping / legend utilities (kept from your script)
@@ -144,9 +144,9 @@ def main():
     import matplotlib.pyplot as plt
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", default="./imgs/bike.jpg")
-    ap.add_argument("--text", default="bicycle helmet")
-    ap.add_argument("--weights", default="siglip_exact_tunes_nonormatall.pt")
+    ap.add_argument("--image", default="./imgs/car.jpg")
+    ap.add_argument("--text", default="car")
+    ap.add_argument("--weights", default="epoch2_wandb.pt")
     ap.add_argument("--max_patches", type=int, default=500)
     ap.add_argument("--alpha", type=int, default=150)
     args = ap.parse_args()
