@@ -1,87 +1,29 @@
-# Prompt-Vision-Detection
+# Prompt Vision Detection
 
-A simple repository for experimenting with prompt-based vision detection models.  
-This project contains training, testing, preprocessing, and visualization scripts, along with example data and pretrained weights.
+## Overview
+This project explores techniques for detecting and localizing objects within images using natural language prompts. The goal is to build models that can take an image and a text description (e.g., "a red chair") and identify exactly where that object is located in the image, typically outputting a heatmap or bounding box.
 
-## 📌 Branches
+## Key Approaches
+The repository investigates two primary methods for this task:
 
-This repository includes the following branches:
+### 1. CNN Decoder with FiLM Conditioning (NaFlex)
+This approach uses a specialized Convolutional Neural Network (CNN) designed as a "tile decoder."
+* **Mechanism:** It processes image feature tokens and text embeddings together.
+* **FiLM Conditioning:** A key feature is the use of FiLM (Feature-wise Linear Modulation), which allows the text description to dynamically influence the visual processing layers.
+* **Output:** This effectively tells the network which visual features to emphasize based on the prompt, resulting in a probability heatmap of the target object.
 
-- **master** – Main branch with core code and default development history. :contentReference[oaicite:0]{index=0}  
-- **naflex** – Experimental branch for additional features and NaFLEX-related code. :contentReference[oaicite:1]{index=1}  
-- **openvocab** – Experimental branch focused on open-vocabulary detection code and experiments. :contentReference[oaicite:2]{index=2}
+### 2. Open Vocabulary Contrastive Learning
+This module implements a contrastive learning approach inspired by SigLIP.
+* **Mechanism:** Instead of training a specific decoder for a fixed set of classes, it trains a projector to align image patch embeddings with text embeddings in a shared space.
+* **Goal:** By pulling the representations of matching image-text pairs closer together and pushing non-matching ones apart, this method aims to enable "open vocabulary" detection—detecting objects based on text descriptions that the model may not have explicitly seen during training.
 
-You can switch to any branch using:
+## Core Functionality
 
-```bash
-git checkout <branch_name>
-📂 Directory Overview
-This repo contains:
+* **Preprocessing**
+  Tools to convert raw image datasets and annotations into compressed formats (like `.npz`) containing pre-computed embeddings and training targets.
 
-.gitignore
-decoder_epoch10.pth
-image.jpg
-overlay_image.jpg
-preprocess.py
-test.py
-train.py
-visualize_dataset.py
-weights_10k_kindagood.pth
-weights_first_working.pth
-weights_siglip_localizer.pth
-weights_zero_object_detection.pth
-(Core code files and pretrained weights) 
+* **Training**
+  Scripts to train both the CNN decoder and the contrastive projector. The training loop includes support for logging metrics (loss, accuracy, IoU) to Weights & Biases.
 
-🚀 Getting Started
-Clone the repository:
-
-git clone https://github.com/albertbastl/Prompt-Vision-Detection.git
-cd Prompt-Vision-Detection
-Install dependencies:
-(Add your dependencies in a requirements.txt file if missing)
-
-pip install -r requirements.txt
-Select a branch:
-
-git fetch
-git checkout openvocab
-# or
-git checkout naflex
-Training:
-
-python train.py
-Testing:
-
-python test.py --model path/to/weights.pth
-🛠️ Scripts
-train.py – Train the model from scratch or resume training. 
-
-test.py – Evaluate a trained model. 
-
-preprocess.py – Dataset preprocessing utilities. 
-
-visualize_dataset.py – Utility to visualize dataset samples and annotations. 
-
-📊 Example Images
-image.jpg – Example input image. 
-
-overlay_image.jpg – Overlay visualization example. 
-
-📦 Weights
-Included pretrained weights:
-
-decoder_epoch10.pth
-
-weights_10k_kindagood.pth
-
-weights_first_working.pth
-
-weights_siglip_localizer.pth
-
-weights_zero_object_detection.pth
-(All found in the repo) 
-
-📝 Notes
-This is an experimental repo with multiple feature branches. 
-
-Documentation and setup instructions should be updated as features evolve.
+* **Visualization**
+  A dedicated visualization tool that takes the trained model's output and overlays the generated heatmaps and bounding boxes onto the original images. This allows for easy qualitative assessment of how well the model "listens" to the text prompts.
